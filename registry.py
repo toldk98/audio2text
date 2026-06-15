@@ -2,7 +2,9 @@ import json
 import os
 from datetime import datetime
 
-AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Audio")
+import platformdirs
+
+AUDIO_DIR = platformdirs.user_data_dir("audio2text")
 REGISTRY_PATH = os.path.join(AUDIO_DIR, "external_registry.json")
 SUPPORTED_EXT = {".m4a", ".wav", ".mp3", ".ogg"}
 

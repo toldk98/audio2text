@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from config import language_list, clean_mode_list, post_action_list, chunk_options
 from profiles import list_profiles
-from registry import add_external, list_external, list_dead, remove_entry
+from registry import add_external, list_external, list_dead, remove_entry, AUDIO_DIR
 from whisper_offline import WhisperTranscriber, DownloadCancelledError
 from whisper_realtime import WhisperRealtimeTranscriber
 
@@ -60,15 +60,21 @@ ADD_EXT_LABEL = "➕ Додати зовнішній файл"
 CLEAN_DEAD_LABEL = "🗑 Очистити мертві записи"
 
 
-def _fzf_select_audio() -> str | None:
-    audio_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Audio")
-
+def _scan_audio_dir(audio_dir: str) -> list[str]:
     patterns = ["*.m4a", "*.wav", "*.mp3", "*.ogg"]
-    local_files = []
+    files = []
     if os.path.isdir(audio_dir):
         for p in patterns:
-            local_files.extend(glob.glob(os.path.join(audio_dir, p)))
-        local_files.sort()
+            files.extend(glob.glob(os.path.join(audio_dir, p)))
+    return sorted(files)
+
+
+def _fzf_select_audio() -> str | None:
+    local_files = _scan_audio_dir(AUDIO_DIR)
+
+    legacy_audio = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Audio")
+    if legacy_audio != AUDIO_DIR and os.path.isdir(legacy_audio):
+        local_files.extend(_scan_audio_dir(legacy_audio))
 
     external = list_external()
 
@@ -76,8 +82,7 @@ def _fzf_select_audio() -> str | None:
     lookup = {}
 
     for f in local_files:
-        rel = os.path.relpath(f, audio_dir)
-        items.append(f"  {rel}")
+        items.append(f"  {os.path.basename(f)}")
         lookup[items[-1]] = f
 
     for entry in external:

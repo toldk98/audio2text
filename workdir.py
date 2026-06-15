@@ -4,15 +4,25 @@ import secrets
 import shutil
 from datetime import datetime
 
+import platformdirs
+
 
 class WorkDir:
+    _base_dir: str | None = None
+
+    @classmethod
+    def _default_base(cls) -> str:
+        if cls._base_dir is None:
+            cls._base_dir = platformdirs.user_cache_dir("audio2text")
+        return cls._base_dir
+
     def __init__(self, input_path: str, base_dir: str | None = None):
         name = os.path.splitext(os.path.basename(input_path))[0]
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         rand = secrets.token_hex(4)
         self.session_id = f"{name}_{ts}_{rand}"
         if base_dir is None:
-            base_dir = os.path.join(os.path.expanduser("~"), ".cache", "audio2text")
+            base_dir = self._default_base()
         self.path = os.path.join(base_dir, self.session_id)
         os.makedirs(self.path, exist_ok=True)
         self._cleaned_audio = os.path.join(self.path, "cleaned.wav")
@@ -21,7 +31,7 @@ class WorkDir:
     def find_existing(cls, input_path: str, base_dir: str | None = None) -> "WorkDir | None":
         name = os.path.splitext(os.path.basename(input_path))[0]
         if base_dir is None:
-            base_dir = os.path.join(os.path.expanduser("~"), ".cache", "audio2text")
+            base_dir = cls._default_base()
         if not os.path.isdir(base_dir):
             return None
         matching = sorted(
