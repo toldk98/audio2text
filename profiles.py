@@ -1,9 +1,12 @@
 import os
+import platformdirs
 
 try:
     import yaml
 except ImportError:
     yaml = None
+
+USER_PROFILES_PATH = os.path.join(platformdirs.user_config_dir("audio2text"), "profiles.yaml")
 
 EMBEDDED_PROFILES = {
     "file": {
@@ -281,18 +284,44 @@ EMBEDDED_PROFILES = {
 }
 
 
-def profiles_path():
+def profiles_path() -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "profiles.yaml")
 
 
-def load_profiles() -> dict:
+def _try_load_yaml(path: str) -> dict | None:
+    if yaml is None or not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data if isinstance(data, dict) else None
+
+
+def _ensure_user_profiles():
+    if os.path.exists(USER_PROFILES_PATH):
+        return
+    os.makedirs(os.path.dirname(USER_PROFILES_PATH), exist_ok=True)
     if yaml is not None:
-        path = profiles_path()
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-            if isinstance(data, dict):
-                return data
+        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+            yaml.dump(EMBEDDED_PROFILES, f, allow_unicode=True, default_flow_style=False)
+    else:
+        import json
+        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+            json.dump(EMBEDDED_PROFILES, f, ensure_ascii=False, indent=2)
+
+
+def load_profiles() -> dict:
+    _ensure_user_profiles()
+
+    data = _try_load_yaml(USER_PROFILES_PATH)
+    if data is not None:
+        return data
+
+    dev_path = profiles_path()
+    if dev_path != USER_PROFILES_PATH:
+        data = _try_load_yaml(dev_path)
+        if data is not None:
+            return data
+
     return EMBEDDED_PROFILES
 
 
