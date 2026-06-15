@@ -1,5 +1,284 @@
 import os
-import yaml
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+EMBEDDED_PROFILES = {
+    "file": {
+        "tiny": {
+            "quick_uk": {
+                "description": "Швидка транскрипція (tiny), без діаризації",
+                "language": "uk",
+                "clean_mode": "temp",
+                "post_action": "delete",
+                "align": False,
+                "diarize": False,
+            }
+        },
+        "base": {
+            "base_uk": {
+                "description": "Базова транскрипція (base), без діаризації",
+                "language": "uk",
+                "clean_mode": "temp",
+                "post_action": "delete",
+                "align": True,
+                "diarize": False,
+            }
+        },
+        "small": {
+            "small_uk": {
+                "description": "Транскрипція (small), без діаризації",
+                "language": "uk",
+                "clean_mode": "temp",
+                "post_action": "delete",
+                "align": True,
+                "diarize": False,
+            }
+        },
+        "medium": {
+            "medium_uk": {
+                "description": "Транскрипція (medium), без діаризації",
+                "language": "uk",
+                "clean_mode": "temp",
+                "post_action": "delete",
+                "align": True,
+                "diarize": False,
+            }
+        },
+        "large-v1": {
+            "legacy_large_v1_uk": {
+                "description": "Повна транскрипція (large-v1) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "legacy_large_v1_en": {
+                "description": "Full transcription (large-v1) + diarization",
+                "language": "en",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+        },
+        "large-v2": {
+            "legacy_large_v2_uk": {
+                "description": "Повна транскрипція (large-v2) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "legacy_large_v2_en": {
+                "description": "Full transcription (large-v2) + diarization",
+                "language": "en",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+        },
+        "large": {
+            "legacy_large_uk": {
+                "description": "Повна транскрипція (large) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "legacy_large_en": {
+                "description": "Full transcription (large) + diarization",
+                "language": "en",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+        },
+        "large-v3": {
+            "full_uk": {
+                "description": "Повна транскрипція (large-v3) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "full_uk_chunked": {
+                "description": "Повна (large-v3) + діаризація, з розбиттям на частини",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+            },
+            "full_en": {
+                "description": "Full transcription (large-v3) + diarization",
+                "language": "en",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+        },
+        "distil-large-v2": {
+            "distil_v2_uk": {
+                "description": "Швидка транскрипція (distil-large-v2) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "distil_v2_uk_chunked": {
+                "description": "Швидка (distil-large-v2) + діаризація, з розбиттям на частини",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+            },
+        },
+        "distil-large-v3": {
+            "distil_v3_uk": {
+                "description": "Швидка транскрипція (distil-large-v3) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "distil_v3_uk_chunked": {
+                "description": "Швидка (distil-large-v3) + діаризація, з розбиттям на частини",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+            },
+        },
+        "distil-large-v3.5": {
+            "distil_v35_uk": {
+                "description": "Швидка транскрипція (distil-large-v3.5) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "distil_v35_uk_chunked": {
+                "description": "Швидка (distil-large-v3.5) + діаризація, з розбиттям на частини",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+            },
+        },
+        "large-v3-turbo": {
+            "turbo_uk": {
+                "description": "Дуже швидка транскрипція (large-v3-turbo) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "turbo_uk_chunked": {
+                "description": "Дуже швидка (large-v3-turbo) + діаризація, з розбиттям на частини",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+            },
+            "turbo_en": {
+                "description": "Fast full transcription (large-v3-turbo) + diarization",
+                "language": "en",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+        },
+        "turbo": {
+            "turbo_alt_uk": {
+                "description": "Дуже швидка транскрипція (turbo) + діаризація",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+            },
+            "turbo_alt_uk_chunked": {
+                "description": "Дуже швидка (turbo) + діаризація, з розбиттям на частини",
+                "language": "uk",
+                "clean_mode": "custom",
+                "clean_dir": "./clean",
+                "post_action": "keep",
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+            },
+        },
+    },
+    "realtime": {
+        "tiny": {
+            "realtime_mono": {
+                "description": "Реальний час, тільки мікрофон",
+                "language": "uk",
+                "chunk_duration": 3,
+                "record_both": False,
+                "save_audio": True,
+            }
+        },
+        "base": {
+            "realtime_dual": {
+                "description": "Реальний час, мікрофон + динаміки",
+                "language": "uk",
+                "chunk_duration": 5,
+                "record_both": True,
+                "save_audio": True,
+            }
+        },
+    },
+}
 
 
 def profiles_path():
@@ -7,12 +286,14 @@ def profiles_path():
 
 
 def load_profiles() -> dict:
-    path = profiles_path()
-    if not os.path.exists(path):
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    return data if isinstance(data, dict) else {}
+    if yaml is not None:
+        path = profiles_path()
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            if isinstance(data, dict):
+                return data
+    return EMBEDDED_PROFILES
 
 
 def list_models(mode: str | None = None) -> list[str]:
