@@ -7,3 +7,4 @@ whisperx
 python-dotenv
 pyyaml
 platformdirs
+ttkbootstrap
