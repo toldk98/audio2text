@@ -22,22 +22,38 @@ def _check_fzf():
     return shutil.which("fzf") is not None
 
 
-def _fzf_choice(items: list[str], prompt: str = "Select:") -> str | None:
-    if not _check_fzf():
-        print("fzf не знайдено. Встанови: sudo apt install fzf")
-        return None
-    input_bytes = "\n".join(items).encode("utf-8")
+def _simple_choice(items: list[str], prompt: str = "Select:") -> str | None:
+    print(f"\n  {prompt}")
+    for i, item in enumerate(items, 1):
+        display = item.split("\t")[0] if "\t" in item else item
+        print(f"    {i:2d}) {display}")
+    print(f"    0) Скасувати")
     try:
-        result = subprocess.run(
-            ["fzf", "--prompt", f"{prompt} "],
-            input=input_bytes,
-            capture_output=True,
-        )
-        if result.returncode == 0:
-            return result.stdout.decode("utf-8").strip()
+        choice = input("  Ваш вибір (номер): ").strip()
+        if choice.isdigit():
+            idx = int(choice)
+            if 1 <= idx <= len(items):
+                return items[idx - 1]
         return None
-    except subprocess.TimeoutExpired:
+    except (EOFError, KeyboardInterrupt):
         return None
+
+
+def _fzf_choice(items: list[str], prompt: str = "Select:") -> str | None:
+    if _check_fzf():
+        input_bytes = "\n".join(items).encode("utf-8")
+        try:
+            result = subprocess.run(
+                ["fzf", "--prompt", f"{prompt} "],
+                input=input_bytes,
+                capture_output=True,
+            )
+            if result.returncode == 0:
+                return result.stdout.decode("utf-8").strip()
+            return None
+        except subprocess.TimeoutExpired:
+            return None
+    return _simple_choice(items, prompt)
 
 
 ADD_EXT_LABEL = "➕ Додати зовнішній файл"
@@ -138,21 +154,21 @@ def _fzf_select_device() -> int | None:
 
 
 def _fzf_choice_tsv(items: list[str], prompt: str = "Select:") -> str | None:
-    if not _check_fzf():
-        return None
-    input_bytes = "\n".join(items).encode("utf-8")
-    try:
-        result = subprocess.run(
-            ["fzf", "--prompt", f"{prompt} ",
-             "--delimiter", "\t", "--with-nth", "1"],
-            input=input_bytes,
-            capture_output=True,
-        )
-        if result.returncode == 0:
-            return result.stdout.decode("utf-8").strip()
-        return None
-    except subprocess.TimeoutExpired:
-        return None
+    if _check_fzf():
+        input_bytes = "\n".join(items).encode("utf-8")
+        try:
+            result = subprocess.run(
+                ["fzf", "--prompt", f"{prompt} ",
+                 "--delimiter", "\t", "--with-nth", "1"],
+                input=input_bytes,
+                capture_output=True,
+            )
+            if result.returncode == 0:
+                return result.stdout.decode("utf-8").strip()
+            return None
+        except subprocess.TimeoutExpired:
+            return None
+    return _simple_choice(items, prompt)
 
 
 def _get_category(cfg: dict) -> str:
