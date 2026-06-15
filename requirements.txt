@@ -1,0 +1,8 @@
+numpy<2
+sounddevice
+torch
+torchaudio
+openai-whisper
+whisperx
+python-dotenv
+pyyaml

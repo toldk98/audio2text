@@ -1,0 +1,13 @@
+.env
+.envrc
+*.wav
+*.m4a
+_clean.*
+__pycache__/
+*.pyc
+.idea/
+venv/
+.venv/
+Audio/
+other/*.txt
+other/*.m4a
