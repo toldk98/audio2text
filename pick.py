@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from config import language_list, clean_mode_list, post_action_list, chunk_options
 from profiles import list_profiles
+from registry import add_external, list_external, list_dead, remove_entry
 from whisper_offline import WhisperTranscriber, DownloadCancelledError
 from whisper_realtime import WhisperRealtimeTranscriber
 
@@ -39,27 +40,81 @@ def _fzf_choice(items: list[str], prompt: str = "Select:") -> str | None:
         return None
 
 
+ADD_EXT_LABEL = "➕ Додати зовнішній файл"
+CLEAN_DEAD_LABEL = "🗑 Очистити мертві записи"
+
+
 def _fzf_select_audio() -> str | None:
     audio_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Audio")
-    if not os.path.isdir(audio_dir):
-        print("❌ Папка ./Audio/ не знайдена")
-        return None
 
     patterns = ["*.m4a", "*.wav", "*.mp3", "*.ogg"]
-    files = []
-    for p in patterns:
-        files.extend(glob.glob(os.path.join(audio_dir, p)))
-    files.sort()
+    local_files = []
+    if os.path.isdir(audio_dir):
+        for p in patterns:
+            local_files.extend(glob.glob(os.path.join(audio_dir, p)))
+        local_files.sort()
 
-    if not files:
-        print("❌ Не знайдено аудіофайлів у ./Audio/")
-        return None
+    external = list_external()
 
-    labels = [os.path.relpath(f, audio_dir) for f in files]
-    chosen = _fzf_choice(labels, prompt="Audio file:")
+    items = []
+    lookup = {}
+
+    for f in local_files:
+        rel = os.path.relpath(f, audio_dir)
+        items.append(f"  {rel}")
+        lookup[items[-1]] = f
+
+    for entry in external:
+        label = f"📁 {entry['name']}  ({os.path.basename(entry['path'])})"
+        items.append(label)
+        lookup[label] = entry["path"]
+
+    if not items:
+        print("⚠️ Немає файлів у Audio/ чи зовнішніх.")
+
+    items.append("")
+    items.append(ADD_EXT_LABEL)
+    items.append(CLEAN_DEAD_LABEL)
+
+    chosen = _fzf_choice(items, prompt="Audio file:")
     if chosen is None:
         return None
-    return os.path.join(audio_dir, chosen)
+
+    if chosen == ADD_EXT_LABEL:
+        return _add_external_flow()
+    if chosen == CLEAN_DEAD_LABEL:
+        _clean_dead_flow()
+        return _fzf_select_audio()
+
+    return lookup.get(chosen)
+
+
+def _add_external_flow() -> str | None:
+    path = input("  Шлях до файлу (Enter — скасувати): ").strip()
+    if not path:
+        return None
+    path = os.path.expanduser(path)
+    err = add_external(path)
+    if err:
+        print(f"  ❌ {err}")
+        return None
+    print(f"  ✅ Додано: {path}")
+    return path
+
+
+def _clean_dead_flow():
+    dead = list_dead()
+    if not dead:
+        print("  ✅ Немає мертвих записів.")
+        return
+    print(f"  Знайдено {len(dead)} мертвих записів:")
+    for e in dead:
+        ans = input(f"    Видалити '{e['name']}' ({e['path']})? [y/N]: ").strip().lower()
+        if ans in ("y", "yes"):
+            remove_entry(e["name"])
+            print("    ✖ Видалено.")
+        else:
+            print("    ➖ Пропущено.")
 
 
 def _fzf_select_device() -> int | None:
