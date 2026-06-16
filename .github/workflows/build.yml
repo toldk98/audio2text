@@ -1,0 +1,88 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: "3.10"
+          miniforge-version: latest
+
+      - name: Create environment
+        run: |
+          conda create -n audio2text python=3.10 -y
+          conda activate audio2text
+          conda install -c pytorch torch==2.3.0 torchaudio==2.3.0 cpuonly -y
+          pip install -r requirements.txt
+          conda install conda-pack -c conda-forge -y
+
+      - name: Set version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Pack and bundle (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cp *.py dist/
+          cp -r gui dist/
+          cp scripts/*.sh scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
+          conda pack -n audio2text -o dist/audio2text-env.tar.gz
+          cd dist
+          chmod +x *.sh
+          tar -czf "../audio2text-$VERSION-linux-x86_64.tar.gz" .
+
+      - name: Pack and bundle (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p dist
+          cp *.py dist/
+          cp -r gui dist/
+          cp scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
+          conda pack -n audio2text -o dist/audio2text-env.tar.gz
+          cd dist
+          7z a "../audio2text-$VERSION-windows-x86_64.zip" *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio2text-${{ env.VERSION }}-${{ runner.os }}
+          path: |
+            audio2text-${{ env.VERSION }}-*.tar.gz
+            audio2text-${{ env.VERSION }}-*.zip
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            audio2text-${{ env.VERSION }}-linux-x86_64.tar.gz
+            audio2text-${{ env.VERSION }}-windows-x86_64.zip
+          generate_release_notes: true
