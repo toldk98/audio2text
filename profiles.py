@@ -344,10 +344,11 @@ def list_profiles(mode: str | None = None, model: str | None = None) -> list[tup
 
 def get_profile(name: str) -> dict | None:
     profiles = load_profiles()
-    for models_dict in profiles.values():
-        for profile_list in models_dict.values():
+    for mode_key, models_dict in profiles.items():
+        for model_name, profile_list in models_dict.items():
             if name in profile_list:
                 cfg = dict(profile_list[name])
+                cfg.setdefault("model", model_name)
                 return cfg
     return None
 
