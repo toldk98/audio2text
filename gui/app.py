@@ -153,10 +153,12 @@ class Audio2TextApp(tb.Window):
         self.minsize(640, 480)
         self._worker: threading.Thread | None = None
         self._running = False
+        self._stop_event: threading.Event | None = None
         self._log_queue: queue.Queue = queue.Queue()
 
         self._build_ui()
         self._load_token_state()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(200, self._drain_log)
 
     def _build_ui(self):
@@ -242,17 +244,21 @@ class Audio2TextApp(tb.Window):
 
     def _build_log_tab(self, parent: tb.Frame):
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
+        parent.rowconfigure(2, weight=1)
 
         self.progress = tb.Progressbar(parent, mode="indeterminate")
-        self.progress.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
+        self.progress.grid(row=0, column=0, sticky=EW, pady=(10, 2), padx=10)
+
+        self.eta_var = tk.StringVar(value="")
+        tb.Label(parent, textvariable=self.eta_var, foreground="cyan", anchor="center").grid(
+            row=1, column=0, sticky=EW, padx=10, pady=(0, 5))
 
         self.log_text = tk.Text(parent, height=20, bg="#1e1e1e", fg="#d4d4d4",
                                 font=("Consolas", 10), state=tk.DISABLED)
-        self.log_text.grid(row=1, column=0, sticky=NSEW, padx=10, pady=(0, 10))
+        self.log_text.grid(row=2, column=0, sticky=NSEW, padx=10, pady=(0, 10))
 
         scroll = tb.Scrollbar(parent, orient=tk.VERTICAL, command=self.log_text.yview)
-        scroll.grid(row=1, column=1, sticky=NS, pady=(0, 10))
+        scroll.grid(row=2, column=1, sticky=NS, pady=(0, 10))
         self.log_text.configure(yscrollcommand=scroll.set)
 
     def _build_settings_tab(self, parent: tb.Frame):
@@ -741,17 +747,34 @@ class Audio2TextApp(tb.Window):
             return
 
         self._running = True
-        self.run_btn.configure(state=DISABLED, text="⏳ Обробка...")
+        self._stop_event = threading.Event()
+        self.run_btn.configure(text="✕ Скасувати", bootstyle="danger", command=self._cancel)
         self.progress.start(10)
+        self.eta_var.set("")
         self.log_text.configure(state=tk.NORMAL)
         self.log_text.delete("1.0", tk.END)
         self.log_text.configure(state=tk.DISABLED)
         self._switch_to_log()
 
         self._worker = threading.Thread(
-            target=self._transcribe_worker, args=(file_path, cfg, token), daemon=True)
+            target=self._transcribe_worker,
+            args=(file_path, cfg, token, self._stop_event), daemon=True)
         self._worker.start()
         self.after(200, self._poll_worker)
+
+    def _cancel(self):
+        if self._stop_event:
+            self._stop_event.set()
+        self.run_btn.configure(state=DISABLED, text="⏳ Скасування...")
+
+    def _on_close(self):
+        if self._running:
+            if messagebox.askyesno("Підтвердження",
+                                   "Транскрипція ще виконується.\nСкасувати та вийти?"):
+                self._cancel()
+                self.destroy()
+        else:
+            self.destroy()
 
     def _switch_to_log(self):
         for i in range(self._notebook.index("end")):
@@ -759,8 +782,10 @@ class Audio2TextApp(tb.Window):
                 self._notebook.select(i)
                 break
 
-    def _transcribe_worker(self, file_path: str, cfg: dict, token: str):
-        from whisper_offline import WhisperTranscriber, DownloadCancelledError
+    def _transcribe_worker(self, file_path: str, cfg: dict, token: str,
+                           stop_event: threading.Event):
+        from whisper_offline import (WhisperTranscriber, DownloadCancelledError,
+                                     TranscriptionCancelledError)
 
         redirector = _LogRedirector(self._log_queue)
         old_stdout = sys.stdout
@@ -776,10 +801,13 @@ class Audio2TextApp(tb.Window):
                 max_workers=cfg.get("max_workers", 2),
                 allow_download=self.allow_dl_var.get(),
                 clean_filter=cfg.get("clean_filter", "full"),
+                stop_event=stop_event,
             )
             transcriber.transcribe(file_path)
         except DownloadCancelledError:
             self._log_queue.put("❌ Завантаження скасовано користувачем.\n")
+        except TranscriptionCancelledError:
+            self._log_queue.put("⏹ Скасовано користувачем.\n")
         except Exception as e:
             self._log_queue.put(f"❌ Помилка: {e}\n")
         finally:
@@ -793,6 +821,10 @@ class Audio2TextApp(tb.Window):
                 msg = self._log_queue.get_nowait()
             except queue.Empty:
                 break
+            if msg.startswith("[ETA]"):
+                self.eta_var.set(msg.strip())
+            elif msg.startswith("[DONE]") or msg.startswith("✅"):
+                self.eta_var.set("")
             self.log_text.configure(state=tk.NORMAL)
             self.log_text.insert(tk.END, msg)
             self.log_text.see(tk.END)
@@ -804,8 +836,10 @@ class Audio2TextApp(tb.Window):
             self.after(200, self._poll_worker)
 
     def _on_done(self):
-        self.run_btn.configure(state=NORMAL, text="▶ Запустити")
+        self.run_btn.configure(state=NORMAL, text="▶ Запустити",
+                               bootstyle="success", command=self._run)
         self.progress.stop()
+        self.eta_var.set("")
         self.log_text.configure(state=tk.NORMAL)
         self.log_text.insert(tk.END, "\n✅ Готово.\n")
         self.log_text.see(tk.END)

@@ -1,16 +1,22 @@
 import os
 import subprocess
 import sys
+import threading
 import time
 import whisperx
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from whisperx.diarize import DiarizationPipeline
-from split_audio import split_audio, dedup_segments
+from split_audio import split_audio, dedup_segments, _get_duration
+from timing import TimingDB
 from workdir import WorkDir
 
 
 class DownloadCancelledError(Exception):
+    pass
+
+
+class TranscriptionCancelledError(Exception):
     pass
 
 
@@ -58,6 +64,7 @@ class WhisperTranscriber:
             max_workers: int = 2,
             allow_download: bool = True,
             clean_filter: str = "full",
+            stop_event: threading.Event | None = None,
     ):
         self.hf_token = hf_token
         self.model_size = model_size
@@ -68,9 +75,11 @@ class WhisperTranscriber:
         self.max_workers = max_workers
         self.allow_download = allow_download
         self.clean_filter = clean_filter
+        self.stop_event = stop_event or threading.Event()
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.compute_type = "float16" if self.device == "cuda" else "int8"
+        self.timing = TimingDB()
         self.time_process = time.time()
 
         print(f"[INFO] Ініціалізація WhisperTranscriber...")
@@ -155,11 +164,15 @@ class WhisperTranscriber:
                 language_code=self.language, device=self.device
             )
             result = whisperx.align(segments, model_a, metadata, audio, self.device)
-            print(f"[TIME] Вирівнювання: {time.time() - t1:.2f} с")
+            align_elapsed = time.time() - t1
+            self.timing.update(self.model_size, self.device, "align", align_elapsed)
+            print(f"[TIME] Вирівнювання: {align_elapsed:.2f} с")
         else:
             result = {"segments": segments}
 
         if self.do_diarize:
+            if self.stop_event.is_set():
+                raise TranscriptionCancelledError()
             print(f"[INFO] Виконується діаризація...")
             t2 = time.time()
             diarize_model = DiarizationPipeline(
@@ -167,7 +180,9 @@ class WhisperTranscriber:
             )
             diarize_segments = diarize_model(audio)
             result = whisperx.assign_word_speakers(diarize_segments, result)
-            print(f"[TIME] Діаризація: {time.time() - t2:.2f} с")
+            diarize_elapsed = time.time() - t2
+            self.timing.update(self.model_size, self.device, "diarize", diarize_elapsed)
+            print(f"[TIME] Діаризація: {diarize_elapsed:.2f} с")
 
         self._write_result(result, output_txt)
         print(f"[DONE] Текст збережено у: {output_txt}")
@@ -203,14 +218,32 @@ class WhisperTranscriber:
                 print(f"[INFO] Resume: {n_resume}/{len(chunks)} чанків уже транскрибовано")
             print(f"[INFO] Транскрибується {len(new_chunks)} чанків...")
 
+            t_start = time.time()
+            completed = 0
+            chunk_times = []
+
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 fut_map = {executor.submit(self._transcribe_chunk, p, s): (p, s) for p, s in new_chunks}
                 for fut in as_completed(fut_map):
+                    if self.stop_event.is_set():
+                        print(f"[INFO] Скасовано: оброблено {completed}/{len(new_chunks)} чанків")
+                        break
                     p, s = fut_map[fut]
+                    t_chunk = time.time()
                     segs = fut.result()
+                    chunk_times.append(time.time() - t_chunk)
                     key = os.path.splitext(os.path.basename(p))[0]
                     self.work_dir.save_transcribed_chunk(key, segs)
                     all_segments.extend(segs)
+                    completed += 1
+                    if completed % 2 == 0 or completed == len(new_chunks):
+                        avg = sum(chunk_times) / len(chunk_times)
+                        remaining = avg * (len(new_chunks) - completed)
+                        print(f"[ETA] Чанк {completed}/{len(new_chunks)} · залишилось ~{remaining:.0f} с")
+
+            if chunk_times:
+                avg_chunk = sum(chunk_times) / len(chunk_times)
+                self.timing.update(self.model_size, self.device, "chunk", avg_chunk)
 
         return all_segments
 
@@ -230,8 +263,14 @@ class WhisperTranscriber:
         try:
             print(f"[INFO] Обробка файлу: {input_audio}")
 
+            t_stage = time.time()
             cleaned = self._clean_audio(input_audio)
+            clean_elapsed = time.time() - t_stage
+            self.timing.update(self.model_size, self.device, "clean", clean_elapsed)
             print(self._elapsed("Очищення аудіо завершено"))
+
+            if self.stop_event.is_set():
+                raise TranscriptionCancelledError()
 
             chunk_sec = self.chunk_minutes * 60
             chunks = split_audio(cleaned, chunk_sec=chunk_sec, overlap_sec=5,
@@ -242,6 +281,14 @@ class WhisperTranscriber:
                 merged = self.work_dir.load_json("merged.json")
                 print(f"[INFO] Resume: завантажено merged.json ({len(merged)} сегментів)")
             else:
+                n_total = len(chunks)
+                duration_est = n_total * self.chunk_minutes * 60
+                pred = self.timing.predict(
+                    self.model_size, self.device, duration_est,
+                    self.chunk_minutes, self.do_align, self.do_diarize
+                )
+                print(f"[INFO] Прогнозований час транскрипції: ~{pred['total']/60:.0f} хв ({n_total} чанків)")
+
                 t0 = time.time()
                 all_segments = self._load_or_transcribe_chunks(chunks)
                 all_segments.sort(key=lambda s: s["start"])
@@ -259,6 +306,9 @@ class WhisperTranscriber:
                 print(f"[INFO] Resume: завантажено aligned.json")
                 self._write_result(result, output_txt)
             else:
+                if self.stop_event.is_set():
+                    raise TranscriptionCancelledError()
+
                 t_load = time.time()
                 audio = whisperx.load_audio(cleaned)
                 print(f"[TIME] Завантаження аудіо: {time.time() - t_load:.2f} с")
@@ -293,8 +343,15 @@ class WhisperTranscriber:
 
         try:
             print(f"[INFO] Обробка файлу: {input_audio}")
+
+            t_stage = time.time()
             cleaned = self._clean_audio(input_audio)
+            clean_elapsed = time.time() - t_stage
+            self.timing.update(self.model_size, self.device, "clean", clean_elapsed)
             print(self._elapsed("Очищення аудіо завершено"))
+
+            if self.stop_event.is_set():
+                raise TranscriptionCancelledError()
 
             if not output_txt:
                 base_path = os.path.splitext(self._original_path)[0]
@@ -305,11 +362,23 @@ class WhisperTranscriber:
                 print(f"[INFO] Resume: завантажено aligned.json")
                 self._write_result(result, output_txt)
             else:
+                duration = _get_duration(cleaned) or 0
+                pred = self.timing.predict(
+                    self.model_size, self.device, duration,
+                    0, self.do_align, self.do_diarize
+                )
+                print(f"[INFO] Прогнозований час транскрипції: ~{pred['total']/60:.0f} хв")
+
                 print(f"[INFO] Початок транскрипції...")
                 t0 = time.time()
                 audio = whisperx.load_audio(cleaned)
                 result = self.model.transcribe(audio)
-                print(f"[TIME] Транскрипція: {time.time() - t0:.2f} с")
+                transcribe_elapsed = time.time() - t0
+                self.timing.update(self.model_size, self.device, "chunk", transcribe_elapsed)
+                print(f"[TIME] Транскрипція: {transcribe_elapsed:.2f} с")
+
+                if self.stop_event.is_set():
+                    raise TranscriptionCancelledError()
 
                 result = self._align_and_diarize(audio, result["segments"], output_txt)
                 self.work_dir.save_json(result, "aligned.json")
