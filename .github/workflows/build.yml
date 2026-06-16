@@ -37,7 +37,7 @@ jobs:
         run: |
           conda create -n audio2text python=3.10 -y
           conda activate audio2text
-          conda install -c pytorch torch==2.3.0 torchaudio==2.3.0 cpuonly -y
+          pip install torch==2.3.0 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           conda install conda-pack -c conda-forge -y
 
