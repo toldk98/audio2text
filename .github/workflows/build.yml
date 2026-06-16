@@ -39,7 +39,7 @@ jobs:
           conda activate audio2text
           pip install torch==2.3.0 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
-          conda install conda-pack -c conda-forge -y
+          pip install conda-pack
 
       - name: Set version
         id: version
@@ -54,7 +54,7 @@ jobs:
           cp *.py dist/
           cp -r gui dist/
           cp scripts/*.sh scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
-          conda pack -n audio2text -o dist/audio2text-env.tar.gz
+          conda-pack -n audio2text -o dist/audio2text-env.tar.gz
           cd dist
           chmod +x *.sh
           tar -czf "../audio2text-$VERSION-linux-x86_64.tar.gz" .
@@ -66,7 +66,7 @@ jobs:
           cp *.py dist/
           cp -r gui dist/
           cp scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
-          conda pack -n audio2text -o dist/audio2text-env.tar.gz
+          conda-pack -n audio2text -o dist/audio2text-env.tar.gz
           cd dist
           7z a "../audio2text-$VERSION-windows-x86_64.zip" *
 
