@@ -1,5 +1,7 @@
 .env
 .envrc
+profiles.yaml
+new_idea.md
 *.wav
 *.m4a
 _clean.*

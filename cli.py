@@ -58,6 +58,11 @@ def build_parser():
         default=2,
         help="Кількість паралельних потоків для обробки чанків",
     )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Автоматично підтверджувати завантаження моделей (без запиту)",
+    )
     return parser
 
 
@@ -83,12 +88,25 @@ def run_cli():
                 print("❌ HF_TOKEN не знайдено в .env")
                 sys.exit(1)
 
+            from whisper_offline import _model_cached
+            if not args.yes and not _model_cached(args.model_name):
+                print(f"\n⚠️ Модель '{args.model_name}' не знайдено в кеші.")
+                print("   Завантажити? [y/N]: ", end="", flush=True)
+                try:
+                    resp = input().strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    resp = "n"
+                if resp not in ("y", "yes"):
+                    print("❌ Скасовано.")
+                    sys.exit(0)
+
             transcriber = WhisperTranscriber(
                 hf_token=hf_token,
                 model_size=args.model_name,
                 language=args.language,
                 chunk_minutes=args.chunk_minutes,
                 max_workers=args.max_workers,
+                allow_download=args.yes,
             )
             transcriber.transcribe(input_path, output_txt=args.out_file)
 

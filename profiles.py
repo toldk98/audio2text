@@ -284,10 +284,6 @@ EMBEDDED_PROFILES = {
 }
 
 
-def profiles_path() -> str:
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "profiles.yaml")
-
-
 def _try_load_yaml(path: str) -> dict | None:
     if yaml is None or not os.path.exists(path):
         return None
@@ -315,12 +311,6 @@ def load_profiles() -> dict:
     data = _try_load_yaml(USER_PROFILES_PATH)
     if data is not None:
         return data
-
-    dev_path = profiles_path()
-    if dev_path != USER_PROFILES_PATH:
-        data = _try_load_yaml(dev_path)
-        if data is not None:
-            return data
 
     return EMBEDDED_PROFILES
 
@@ -360,3 +350,50 @@ def get_profile(name: str) -> dict | None:
                 cfg = dict(profile_list[name])
                 return cfg
     return None
+
+
+def _get_profile_container(name: str) -> tuple[dict, str, str] | None:
+    profiles = load_profiles()
+    for mode_key, models_dict in profiles.items():
+        for model_key, profile_list in models_dict.items():
+            if name in profile_list:
+                return profiles, mode_key, model_key
+    return None
+
+
+def save_profiles(data: dict):
+    _ensure_user_profiles()
+    if yaml is not None:
+        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+            yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+    else:
+        import json
+        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def upsert_profile(name: str, cfg: dict):
+    data = load_profiles()
+    container = _get_profile_container(name)
+    if container:
+        profiles_data, mode_key, model_key = container
+        profiles_data[mode_key][model_key][name] = cfg
+    else:
+        mode = cfg.get("mode", "file")
+        model = cfg.get("model", "base")
+        data.setdefault(mode, {}).setdefault(model, {})[name] = {k: v for k, v in cfg.items() if k not in ("mode", "model")}
+    save_profiles(data)
+
+
+def delete_profile(name: str) -> bool:
+    container = _get_profile_container(name)
+    if not container:
+        return False
+    profiles_data, mode_key, model_key = container
+    del profiles_data[mode_key][model_key][name]
+    if not profiles_data[mode_key][model_key]:
+        del profiles_data[mode_key][model_key]
+    if not profiles_data[mode_key]:
+        del profiles_data[mode_key]
+    save_profiles(profiles_data)
+    return True

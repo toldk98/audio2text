@@ -9,7 +9,7 @@ import shutil
 import sounddevice as sd
 from dotenv import load_dotenv
 
-from config import language_list, clean_mode_list, post_action_list, chunk_options
+from config import language_list, chunk_options
 from profiles import list_profiles
 from registry import add_external, list_external, list_dead, remove_entry, AUDIO_DIR
 from whisper_offline import WhisperTranscriber, DownloadCancelledError
@@ -316,26 +316,6 @@ def _edit_cfg(cfg: dict) -> dict:
             l = _fzf_choice(language_list, prompt="Language:")
             if l:
                 cfg["language"] = l
-
-        elif action == "clean_mode":
-            c = _fzf_choice(clean_mode_list, prompt="Clean mode:")
-            if c:
-                cfg["clean_mode"] = c
-                if c == "custom":
-                    print(f"Current clean dir: {cfg.get('clean_dir', '(not set)')}")
-                    inp = input("Enter path (Enter to skip): ").strip()
-                    if inp:
-                        cfg["clean_dir"] = inp
-
-        elif action == "post_action":
-            p = _fzf_choice(post_action_list, prompt="Post action:")
-            if p:
-                cfg["post_action"] = p
-                if p == "move":
-                    print(f"Current move dir: {cfg.get('post_dir', '(not set)')}")
-                    inp = input("Enter path (Enter to skip): ").strip()
-                    if inp:
-                        cfg["post_dir"] = inp
 
         elif action == "diarize":
             d = _fzf_choice(["yes", "no"], prompt="Diarization:")

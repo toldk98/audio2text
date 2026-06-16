@@ -1,7 +1,7 @@
 numpy<2
 sounddevice
-torch
-torchaudio
+torch==2.3.0
+torchaudio==2.3.0
 openai-whisper
 whisperx
 python-dotenv

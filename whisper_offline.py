@@ -1,8 +1,6 @@
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import whisperx
 import torch
@@ -21,7 +19,7 @@ def _model_cached(model_size: str) -> bool:
     return os.path.isfile(os.path.join(cache_dir, f"{model_size}.pt"))
 
 
-def _confirm_download(model_size: str, do_align: bool, do_diarize: bool):
+def _confirm_download(model_size: str, do_align: bool, do_diarize: bool, allow_download: bool = True):
     if _model_cached(model_size):
         return
 
@@ -41,9 +39,11 @@ def _confirm_download(model_size: str, do_align: bool, do_diarize: bool):
         print(f"   Додатково: align модель (~300 MB) при першому використанні.")
     if do_diarize:
         print(f"   Додатково: діаризаційна модель (~200 MB) при першому використанні.")
-    response = input("   Продовжити? [y/N]: ").strip().lower()
-    if response not in ("y", "yes"):
-        raise DownloadCancelledError(f"Завантаження моделі '{model_size}' скасовано")
+
+    if not allow_download:
+        raise DownloadCancelledError(f"Завантаження моделі '{model_size}' скасовано — 'allow_download=False'")
+
+    print(f"   Завантаження...")
 
 
 class WhisperTranscriber:
@@ -52,26 +52,22 @@ class WhisperTranscriber:
             hf_token: str,
             model_size: str = "base",
             language: str = "uk",
-            clean_mode: str = "temp",
-            clean_dir: str | None = None,
-            post_action: str = "delete",
-            post_dir: str | None = None,
             do_align: bool = True,
             do_diarize: bool = True,
             chunk_minutes: int = 0,
             max_workers: int = 2,
+            allow_download: bool = True,
+            clean_filter: str = "full",
     ):
         self.hf_token = hf_token
         self.model_size = model_size
         self.language = language
-        self.clean_mode = clean_mode
-        self.clean_dir = clean_dir
-        self.post_action = post_action
-        self.post_dir = post_dir
         self.do_align = do_align
         self.do_diarize = do_diarize
         self.chunk_minutes = chunk_minutes
         self.max_workers = max_workers
+        self.allow_download = allow_download
+        self.clean_filter = clean_filter
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.compute_type = "float16" if self.device == "cuda" else "int8"
@@ -80,7 +76,7 @@ class WhisperTranscriber:
         print(f"[INFO] Ініціалізація WhisperTranscriber...")
         print(f"[INFO] Пристрій: {self.device}, режим обчислень: {self.compute_type}")
 
-        _confirm_download(self.model_size, self.do_align, self.do_diarize)
+        _confirm_download(self.model_size, self.do_align, self.do_diarize, self.allow_download)
 
         self.model = whisperx.load_model(
             self.model_size,
@@ -95,30 +91,26 @@ class WhisperTranscriber:
         return f"[TIME] {message}: {elapsed:.2f} с"
 
     def _clean_audio(self, input_audio: str) -> str:
-        if self.work_dir:
-            clean_path = self.work_dir.cleaned_audio
-        elif self.clean_mode == "custom" and self.clean_dir:
-            os.makedirs(self.clean_dir, exist_ok=True)
-            base = os.path.basename(input_audio)
-            name = os.path.splitext(base)[0]
-            clean_path = os.path.join(self.clean_dir, f"{name}_clean.wav")
-        else:
-            tmp = tempfile.NamedTemporaryFile(suffix="_clean.wav", delete=False)
-            clean_path = tmp.name
-            tmp.close()
+        clean_path = self.work_dir.cleaned_audio
 
         if os.path.exists(clean_path):
             print(f"[INFO] Використовується кешований cleaned: {clean_path}")
             return clean_path
 
-        print(f"[INFO] Очищення аудіо через ffmpeg (afftdn+loudnorm)...")
+        if self.clean_filter == "off":
+            print(f"[INFO] Очищення аудіо вимкнено.")
+            return input_audio
+
+        filter_names = {"full": "afftdn,loudnorm", "light": "highpass=f=200,lowpass=f=3000"}
+        af = filter_names.get(self.clean_filter, "afftdn,loudnorm")
+        print(f"[INFO] Очищення аудіо через ffmpeg ({af})...")
 
         ffmpeg_cmd = [
             "ffmpeg", "-y",
             "-i", input_audio,
             "-ar", "16000",
             "-ac", "1",
-            "-af", "afftdn,loudnorm",
+            "-af", af,
             clean_path,
         ]
 
@@ -137,26 +129,6 @@ class WhisperTranscriber:
             print("[WARN] ffmpeg завершився з помилкою, використовується оригінальний файл.")
             print(e.stderr.decode("utf-8", errors="ignore"))
             return input_audio
-
-    def _post_process(self, clean_path: str):
-        if clean_path == self._original_path:
-            return
-        if self.work_dir and clean_path == self.work_dir.cleaned_audio:
-            if self.post_action in ("keep",):
-                print(f"[INFO] Cleaned audio в workdir: {clean_path}")
-            return
-        if self.post_action == "delete":
-            if os.path.exists(clean_path):
-                os.unlink(clean_path)
-                print(f"[INFO] Видалено: {clean_path}")
-        elif self.post_action == "move":
-            dst_dir = self.post_dir or os.path.dirname(self._original_path)
-            os.makedirs(dst_dir, exist_ok=True)
-            dst = os.path.join(dst_dir, os.path.basename(clean_path))
-            shutil.move(clean_path, dst)
-            print(f"[INFO] Перенесено: {clean_path} -> {dst}")
-        elif self.post_action == "keep":
-            print(f"[INFO] Збережено: {clean_path}")
 
     def _segments_to_text(self, result: dict) -> list[str]:
         lines = []
@@ -296,7 +268,6 @@ class WhisperTranscriber:
 
             total_time = time.time() - start_total
             print(f"[DONE] Загальний час обробки: {total_time / 60:.1f} хв ({total_time:.1f} с)")
-            self._post_process(cleaned)
             self.work_dir.cleanup()
             print(self._elapsed("Обробку завершено"))
             return output_txt
@@ -345,7 +316,6 @@ class WhisperTranscriber:
 
             total_time = time.time() - start_total
             print(f"[DONE] Загальний час обробки: {total_time / 60:.1f} хв ({total_time:.1f} с)")
-            self._post_process(cleaned)
             self.work_dir.cleanup()
             print(self._elapsed("Обробку завершено"))
             return output_txt

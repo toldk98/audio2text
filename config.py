@@ -32,6 +32,4 @@ language_list = [
     "tr",
 ]
 
-clean_mode_list = ["temp", "keep", "custom"]
-post_action_list = ["delete", "keep", "move"]
 chunk_options = [0, 5, 10, 15, 20, 30]
