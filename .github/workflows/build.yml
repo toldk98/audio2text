@@ -30,19 +30,17 @@ jobs:
       - name: Setup Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
+          activate-environment: audio2text
           python-version: "3.10"
           miniforge-version: latest
 
-      - name: Create environment
+      - name: Install dependencies
         run: |
-          conda create -n audio2text python=3.10 -y
-          conda activate audio2text
           pip install torch==2.3.0 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           pip install conda-pack
 
       - name: Set version
-        id: version
         run: |
           VERSION="${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
