@@ -39,11 +39,19 @@ jobs:
           pip install torch==2.3.0 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           pip install conda-pack
+          ok=false
           for i in 1 2 3 4 5; do
-            conda install -c conda-forge ffmpeg -y && break
+            if conda install -c conda-forge ffmpeg -y; then
+              ok=true
+              break
+            fi
             echo "conda install failed (attempt $i/5), retrying in 15s..."
             sleep 15
           done
+          if [ "$ok" != "true" ]; then
+            echo "FATAL: conda install ffmpeg failed after 5 attempts"
+            exit 1
+          fi
 
       - name: Set version
         run: |
