@@ -93,10 +93,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for tag in $(gh release list --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName'); do
-            echo "Deleting old pre-release: $tag"
-            gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          done
+          tags=$(gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName')
+          if [ -z "$tags" ]; then
+            echo "No old pre-releases to delete."
+          else
+            echo "$tags" | while IFS= read -r tag; do
+              [ -z "$tag" ] && continue
+              echo "Deleting old pre-release: $tag"
+              gh release delete "$tag" --yes --cleanup-tag
+            done
+          fi
 
       - name: Clean up old failed workflow runs
         env:
