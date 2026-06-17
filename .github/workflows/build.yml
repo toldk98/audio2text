@@ -98,6 +98,7 @@ jobs:
       - name: Clean up old pre-releases
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           tags=$(gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName')
           if [ -z "$tags" ]; then
@@ -113,6 +114,7 @@ jobs:
       - name: Clean up old failed workflow runs
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           for id in $(gh run list --limit 50 --json databaseId,conclusion --jq '.[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .databaseId'); do
             echo "Deleting failed run: $id"
