@@ -70,7 +70,7 @@ jobs:
           cp -r gui dist/
           cp scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
           conda-pack -n audio2text -o dist/audio2text-env.tar.gz
-          cd scripts && iscc installer.iss /dVERSION=$VERSION
+          cd scripts && MSYS2_ARG_CONV_EXCL="*" iscc installer.iss /dVERSION=$VERSION
           cd ..
 
       - name: Upload artifact
