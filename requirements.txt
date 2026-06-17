@@ -8,5 +8,5 @@ python-dotenv
 pyyaml
 platformdirs
 ttkbootstrap
-keyring
+keyring[pywin32]
 psutil

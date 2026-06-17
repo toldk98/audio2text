@@ -14,7 +14,7 @@ from ttkbootstrap.constants import *
 
 from profiles import list_profiles, get_profile, upsert_profile, delete_profile
 from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry
-from gui.token_manager import load_token, save_token, get_storage_mode, MODES, has_keyring, load_settings, save_settings
+from gui.token_manager import load_token, save_token, MODES, has_keyring, load_settings, save_settings
 from config import cpu_levels
 
 
@@ -650,17 +650,11 @@ class Audio2TextApp(tb.Window):
         token, source = load_token()
         if token:
             self.token_var.set(token)
-            lbl = {"env": "🔑 змінна HF_TOKEN", "keychain": "🔑 системне сховище",
-                   "file": "🔑 settings.json"}.get(source, "")
+            lbl = {"env": "🔑 змінна HF_TOKEN", "keychain": "🔑 системне сховище"}.get(source, "")
             self.token_status_var.set(lbl)
 
-        mode = get_storage_mode()
-        if mode and mode in MODES:
-            self.token_mode_cb.set(MODES[mode])
-        elif has_keyring():
+        if has_keyring():
             self.token_mode_cb.set(MODES["keychain"])
-        else:
-            self.token_mode_cb.set(MODES["file"])
 
     def _save_token(self):
         token = self.token_var.get().strip()
@@ -668,15 +662,15 @@ class Audio2TextApp(tb.Window):
             messagebox.showwarning("Помилка", "Введіть токен.")
             return
 
-        mode_label = self.token_mode_cb.get()
-        mode = next((k for k, v in MODES.items() if v == mode_label), None)
-        if mode is None or mode == "ask":
-            self.token_status_var.set("⚠ режим «питати кожен запуск» — токен не збережено")
+        if not has_keyring():
+            messagebox.showerror("Помилка",
+                "Системне сховище недоступне. Встановіть змінну середовища HF_TOKEN\n"
+                "або налаштуйте keyring (sudo apt install python3-keyring на Linux).")
             return
 
         try:
-            save_token(token, mode)
-            self.token_status_var.set("✅ токен збережено")
+            save_token(token, self.token_mode_cb.get())
+            self.token_status_var.set("✅ токен збережено в системному сховищі")
         except Exception as e:
             messagebox.showerror("Помилка", f"Не вдалося зберегти токен:\n{e}")
 

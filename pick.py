@@ -8,6 +8,7 @@ import shutil
 
 import sounddevice as sd
 from dotenv import load_dotenv
+from gui.token_manager import load_token
 
 from config import language_list, chunk_options
 from profiles import list_profiles
@@ -339,9 +340,9 @@ def _edit_cfg(cfg: dict) -> dict:
 
 
 def _run_file_mode(cfg: dict, audio_path: str):
-    hf_token = os.getenv("HF_TOKEN")
+    hf_token, source = load_token()
     if not hf_token:
-        print("❌ HF_TOKEN не знайдено в .env")
+        print("❌ HF_TOKEN не знайдено. Встановіть змінну середовища або збережіть через GUI.")
         sys.exit(1)
 
     transcriber = WhisperTranscriber(
