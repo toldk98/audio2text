@@ -49,7 +49,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "{cm:AppComment}"
 
 [Run]
-Filename: "{tmp}\unpack_env.bat"; Parameters: """{app}"""; Flags: runascurrentuser hidewizard; StatusMsg: "{cm:ExtractingEnv}"
+Filename: "{tmp}\unpack_env.bat"; Parameters: """{app}"""; Flags: hidewizard; StatusMsg: "{cm:ExtractingEnv}"
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: postinstall nowait skipifsilent unchecked
 
 [UninstallRun]
@@ -69,7 +69,11 @@ begin
     '@echo off' + #13#10 +
     'set DIR=%~1' + #13#10 +
     'set ENV_DIR=%DIR%\audio2text-env' + #13#10 +
-    'if exist "%ENV_DIR%" rmdir /s /q "%ENV_DIR%"' + #13#10 +
+    'if exist "%ENV_DIR%\Scripts\python.exe" exit /b 0' + #13#10 +
+    'if exist "%ENV_DIR%" (' + #13#10 +
+    '  attrib -R "%ENV_DIR%" /s /d 2>nul' + #13#10 +
+    '  rmdir /s /q "%ENV_DIR%"' + #13#10 +
+    ')' + #13#10 +
     'mkdir "%ENV_DIR%"' + #13#10 +
     'echo Rozpakuvannia seredovyshcha...' + #13#10 +
     'tar -xzf "%DIR%\audio2text-env.tar.gz" -C "%ENV_DIR%"' + #13#10 +

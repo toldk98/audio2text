@@ -12,6 +12,10 @@ if not exist "%DIR%main.py" (
 )
 
 if not exist "%ENV_DIR%\Scripts\python.exe" (
+    if exist "%ENV_DIR%" (
+        attrib -R "%ENV_DIR%" /s /d 2>nul
+        rmdir /s /q "%ENV_DIR%" 2>nul
+    )
     if not exist "%ENV_DIR%" md "%ENV_DIR%"
     if not exist "%DIR%audio2text-env.tar.gz" (
         echo [POMYLKA] audio2text-env.tar.gz ne znaydeno.
