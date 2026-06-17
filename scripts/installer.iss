@@ -49,7 +49,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "{cm:AppComment}"
 
 [Run]
-Filename: "{tmp}\unpack_env.bat"; Parameters: """{app}"""; Flags: hidewizard; StatusMsg: "{cm:ExtractingEnv}"
+Filename: "{tmp}\unpack_env.bat"; Parameters: """{app}"" ""{#VERSION}"""; Flags: hidewizard; StatusMsg: "{cm:ExtractingEnv}"
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: postinstall nowait skipifsilent unchecked
 
 [UninstallRun]
@@ -68,8 +68,13 @@ begin
   SaveStringToFile(UnpackBatch,
     '@echo off' + #13#10 +
     'set DIR=%~1' + #13#10 +
+    'set VERSION=%~2' + #13#10 +
     'set ENV_DIR=%DIR%\audio2text-env' + #13#10 +
-    'if exist "%ENV_DIR%\Scripts\python.exe" exit /b 0' + #13#10 +
+    'set VERSION_FILE=%ENV_DIR%\.version' + #13#10 +
+    'if exist "%VERSION_FILE%" (' + #13#10 +
+    '  findstr /x "%VERSION%" "%VERSION_FILE%" >nul 2>nul' + #13#10 +
+    '  if not errorlevel 1 exit /b 0' + #13#10 +
+    ')' + #13#10 +
     'if exist "%ENV_DIR%" (' + #13#10 +
     '  attrib -R "%ENV_DIR%" /s /d 2>nul' + #13#10 +
     '  rmdir /s /q "%ENV_DIR%"' + #13#10 +
@@ -82,6 +87,7 @@ begin
     '  pause' + #13#10 +
     '  exit /b 1' + #13#10 +
     ')' + #13#10 +
+    'echo %VERSION%>"%VERSION_FILE%"' + #13#10 +
     'exit /b 0' + #13#10,
     False);
 end;
