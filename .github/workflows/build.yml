@@ -79,6 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - name: Download artifacts
@@ -86,9 +87,28 @@ jobs:
         with:
           path: artifacts
 
+      - name: Clean up old pre-releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for tag in $(gh release list --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName'); do
+            echo "Deleting old pre-release: $tag"
+            gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          done
+
+      - name: Clean up old failed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for id in $(gh run list --limit 50 --json databaseId,conclusion --jq '.[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .databaseId'); do
+            echo "Deleting failed run: $id"
+            gh run delete "$id" 2>/dev/null || true
+          done
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
           generate_release_notes: true
           prerelease: true
+          make_latest: false
