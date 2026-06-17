@@ -51,7 +51,8 @@ jobs:
           mkdir -p dist
           cp *.py dist/
           cp -r gui dist/
-          cp scripts/*.sh scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
+          cp scripts/*.sh dist/ 2>/dev/null || true
+          cp scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
           conda-pack -n audio2text -o dist/audio2text-env.tar.gz
           cd dist
           chmod +x *.sh
