@@ -39,6 +39,7 @@ jobs:
           pip install torch==2.3.0 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           pip install conda-pack
+          conda install -c conda-forge ffmpeg -y
 
       - name: Set version
         run: |

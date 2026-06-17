@@ -20,12 +20,15 @@ if not exist "%ENV_DIR%" (
         pause
         exit /b 1
     )
-    tar -xzf "%DIR%audio2text-env.tar.gz" -C "%ENV_DIR%"
+    pushd "%ENV_DIR%"
+    tar -xzf "%DIR%audio2text-env.tar.gz"
     if errorlevel 1 (
+        popd
         echo [POMYLKA] Ne vdalosia rozpakuvaty seredovyshche.
         pause
         exit /b 1
     )
+    popd
 )
 
 if not exist "%ENV_DIR%\Scripts\activate.bat" (
