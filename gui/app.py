@@ -16,6 +16,7 @@ from profiles import list_profiles, get_profile, upsert_profile, delete_profile
 from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry
 from gui.token_manager import load_token, save_token, MODES, has_keyring, load_settings, save_settings
 from config import cpu_levels
+from gui.lang import _, _inst
 
 
 class _ToolTip:
@@ -149,7 +150,7 @@ class Audio2TextApp(tb.Window):
     def __init__(self):
         settings = load_settings()
         theme = settings.get("theme", "darkly")
-        super().__init__(title="Audio2Text Transcriber", themename=theme)
+        super().__init__(title=_("app.title"), themename=theme)
         self.geometry("820x680")
         self.minsize(640, 480)
         self._worker: threading.Thread | None = None
@@ -169,9 +170,9 @@ class Audio2TextApp(tb.Window):
         transcribe = tb.Frame(self._notebook)
         log_tab = tb.Frame(self._notebook)
         settings_tab = tb.Frame(self._notebook)
-        self._notebook.add(transcribe, text="Транскрипція")
-        self._notebook.add(log_tab, text="Лог")
-        self._notebook.add(settings_tab, text="Налаштування")
+        self._notebook.add(transcribe, text=_("tab.transcribe"))
+        self._notebook.add(log_tab, text=_("tab.log"))
+        self._notebook.add(settings_tab, text=_("tab.settings"))
 
         self._build_transcribe_tab(transcribe)
         self._build_log_tab(log_tab)
@@ -181,26 +182,26 @@ class Audio2TextApp(tb.Window):
         parent.columnconfigure(0, weight=1)
 
         # --- File ---
-        frame = tb.LabelFrame(parent, text="Аудіофайл")
+        frame = tb.LabelFrame(parent, text=_("file.frame"))
         frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
         frame.columnconfigure(1, weight=1)
 
         self.file_var = tk.StringVar(value=AUDIO_DIR)
         tb.Entry(frame, textvariable=self.file_var).grid(row=0, column=1, sticky=EW, padx=(5, 5))
-        tb.Button(frame, text="Огляд", command=self._browse_file).grid(row=0, column=2)
+        tb.Button(frame, text=_("file.browse"), command=self._browse_file).grid(row=0, column=2)
 
         self._reg_refresh_var = tk.StringVar()
-        tb.Label(frame, text="Реєстр:").grid(row=1, column=0, padx=(0, 5), pady=(5, 0))
+        tb.Label(frame, text=_("file.registry_label")).grid(row=1, column=0, padx=(0, 5), pady=(5, 0))
         self.reg_cb = tb.Combobox(frame, textvariable=self._reg_refresh_var,
                                   values=[], state="readonly", width=50)
         self.reg_cb.grid(row=1, column=1, sticky=EW, padx=(5, 5), pady=(5, 0))
         self.reg_cb.bind("<<ComboboxSelected>>", self._on_registry_pick)
-        tb.Button(frame, text="➕ До реєстру", command=self._add_to_registry,
+        tb.Button(frame, text=_("file.add_to_registry"), command=self._add_to_registry,
                   width=14).grid(row=1, column=2, pady=(5, 0))
         self._refresh_registry_list()
 
         # --- Token ---
-        frame = tb.LabelFrame(parent, text="HuggingFace Token")
+        frame = tb.LabelFrame(parent, text=_("token.frame"))
         frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
         frame.columnconfigure(1, weight=1)
 
@@ -213,14 +214,14 @@ class Audio2TextApp(tb.Window):
                                          values=list(MODES.values()), state="readonly", width=30)
         self.token_mode_cb.grid(row=0, column=2, padx=(0, 5))
 
-        tb.Button(frame, text="Зберегти", command=self._save_token).grid(row=0, column=3)
+        tb.Button(frame, text=_("token.save"), command=self._save_token).grid(row=0, column=3)
 
         self.token_status_var = tk.StringVar(value="")
         tb.Label(frame, textvariable=self.token_status_var, foreground="gray").grid(
             row=1, column=1, columnspan=3, sticky=W, pady=(3, 0))
 
         # --- Profile ---
-        frame = tb.LabelFrame(parent, text="Профіль транскрипції")
+        frame = tb.LabelFrame(parent, text=_("profile.frame"))
         frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
         frame.columnconfigure(1, weight=1)
 
@@ -241,17 +242,17 @@ class Audio2TextApp(tb.Window):
         # --- CPU Load ---
         cpu_frame = tb.Frame(parent)
         cpu_frame.grid(row=3, column=0, sticky=W, pady=(5, 0), padx=10)
-        tb.Label(cpu_frame, text="CPU:", foreground="gray").pack(side=LEFT, padx=(0, 5))
+        tb.Label(cpu_frame, text=_("cpu.label"), foreground="gray").pack(side=LEFT, padx=(0, 5))
         self.cpu_var = tk.StringVar(value="high")
         self.cpu_cb = tb.Combobox(cpu_frame, textvariable=self.cpu_var,
                                   values=list(cpu_levels), state="readonly", width=10)
         self.cpu_cb.pack(side=LEFT)
-        _ToolTip(self.cpu_cb, "Високе — всі ядра\nСереднє — половина ядер\nНизьке — 1 потік, низький пріоритет")
-        cpu_hint = tb.Label(cpu_frame, text="(перевизначає профіль)", foreground="gray")
+        _ToolTip(self.cpu_cb, _("cpu.tooltip"))
+        cpu_hint = tb.Label(cpu_frame, text=_("cpu.override_hint"), foreground="gray")
         cpu_hint.pack(side=LEFT, padx=(8, 0))
 
         # --- Run ---
-        self.run_btn = tb.Button(parent, text="▶ Запустити", bootstyle="success",
+        self.run_btn = tb.Button(parent, text=_("run.start"), bootstyle="success",
                                  command=self._run, width=20)
         self.run_btn.grid(row=4, column=0, pady=(10, 5))
 
@@ -279,7 +280,7 @@ class Audio2TextApp(tb.Window):
         parent.rowconfigure(5, weight=1)
 
         # --- Theme ---
-        frame = tb.LabelFrame(parent, text="Тема оформлення")
+        frame = tb.LabelFrame(parent, text=_("settings.theme_frame"))
         frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
         frame.columnconfigure(1, weight=1)
 
@@ -287,31 +288,42 @@ class Audio2TextApp(tb.Window):
         themes = sorted(self.style.theme_names())
         tb.Combobox(frame, textvariable=self.theme_var, values=themes,
                     state="readonly", width=30).grid(row=0, column=1, sticky=W, padx=(5, 5))
-        tb.Button(frame, text="Застосувати", command=self._apply_theme).grid(row=0, column=2)
+        tb.Button(frame, text=_("settings.theme_apply"), command=self._apply_theme).grid(row=0, column=2)
 
         # --- Models ---
-        frame = tb.LabelFrame(parent, text="Моделі")
+        frame = tb.LabelFrame(parent, text=_("settings.models_frame"))
         frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
 
         self.allow_dl_var = tk.BooleanVar(value=True)
-        tb.Checkbutton(frame, text="Авто-завантаження моделей (без підтвердження)",
+        tb.Checkbutton(frame, text=_("settings.models_auto"),
                        variable=self.allow_dl_var).grid(row=0, column=0, sticky=W, pady=5, padx=5)
-        info_text = ("Коли вимкнено — перед завантаженням моделі з'явиться "
-                     "попередження, і транскрипцію буде скасовано.")
-        tb.Label(frame, text=info_text, foreground="gray", wraplength=600).grid(
+        tb.Label(frame, text=_("settings.models_auto_hint"), foreground="gray", wraplength=600).grid(
             row=1, column=0, sticky=W, padx=(15, 5), pady=(0, 5))
 
+        # --- Language ---
+        lang_frame = tb.LabelFrame(parent, text=_("settings.lang_frame"))
+        lang_frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
+        lang_frame.columnconfigure(1, weight=1)
+        tb.Label(lang_frame, text=_("settings.lang_label")).grid(row=0, column=0, sticky=W, padx=(10, 5), pady=5)
+        self.lang_var = tk.StringVar(value=_inst.current)
+        lang_cb = tb.Combobox(lang_frame, textvariable=self.lang_var,
+                              values=["uk", "en"], state="readonly", width=10)
+        lang_cb.grid(row=0, column=1, sticky=W, padx=(0, 10), pady=5)
+        lang_cb.bind("<<ComboboxSelected>>", self._on_lang_change)
+        tb.Label(lang_frame, text=_("settings.lang_restart_hint"),
+                 foreground="gray").grid(row=1, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=(0, 5))
+
         # --- Profiles ---
-        frame = tb.LabelFrame(parent, text="Профілі")
-        frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
+        frame = tb.LabelFrame(parent, text=_("profiles.frame"))
+        frame.grid(row=3, column=0, sticky=EW, pady=5, padx=10)
         frame.columnconfigure(0, weight=1)
 
         self.profile_tree = ttk.Treeview(frame, columns=("name", "model", "lang", "opts"),
                                          show="headings", height=5, selectmode="browse")
-        self.profile_tree.heading("name", text="Назва")
-        self.profile_tree.heading("model", text="Модель")
-        self.profile_tree.heading("lang", text="Мова")
-        self.profile_tree.heading("opts", text="Опції")
+        self.profile_tree.heading("name", text=_("profiles.col_name"))
+        self.profile_tree.heading("model", text=_("profiles.col_model"))
+        self.profile_tree.heading("lang", text=_("profiles.col_lang"))
+        self.profile_tree.heading("opts", text=_("profiles.col_opts"))
         self.profile_tree.column("name", width=160)
         self.profile_tree.column("model", width=140)
         self.profile_tree.column("lang", width=50)
@@ -321,23 +333,23 @@ class Audio2TextApp(tb.Window):
 
         btn_row = tb.Frame(frame)
         btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
-        tb.Button(btn_row, text="➕ Додати", command=self._add_profile_dialog,
+        tb.Button(btn_row, text=_("profiles.add"), command=self._add_profile_dialog,
                   width=12).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text="✏️ Редагувати", command=self._edit_selected_profile,
+        tb.Button(btn_row, text=_("profiles.edit"), command=self._edit_selected_profile,
                   width=14).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text="🗑 Видалити", bootstyle="danger",
+        tb.Button(btn_row, text=_("profiles.delete"), bootstyle="danger",
                   command=self._delete_selected_profile, width=12).pack(side=LEFT)
 
         # --- Registry ---
-        frame = tb.LabelFrame(parent, text="Реєстр файлів")
-        frame.grid(row=3, column=0, sticky=EW, pady=5, padx=10)
+        frame = tb.LabelFrame(parent, text=_("registry.frame"))
+        frame.grid(row=4, column=0, sticky=EW, pady=5, padx=10)
         frame.columnconfigure(0, weight=1)
 
         self.reg_tree = ttk.Treeview(frame, columns=("name", "path", "status"),
                                      show="headings", height=4, selectmode="browse")
-        self.reg_tree.heading("name", text="Назва")
-        self.reg_tree.heading("path", text="Шлях")
-        self.reg_tree.heading("status", text="Статус")
+        self.reg_tree.heading("name", text=_("registry.col_name"))
+        self.reg_tree.heading("path", text=_("registry.col_path"))
+        self.reg_tree.heading("status", text=_("registry.col_status"))
         self.reg_tree.column("name", width=120)
         self.reg_tree.column("path", width=320)
         self.reg_tree.column("status", width=60)
@@ -345,33 +357,33 @@ class Audio2TextApp(tb.Window):
 
         btn_row = tb.Frame(frame)
         btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
-        tb.Button(btn_row, text="🔄", command=self._refresh_registry_tree,
+        tb.Button(btn_row, text=_("registry.refresh"), command=self._refresh_registry_tree,
                   width=4).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text="🗑 Видалити", bootstyle="danger",
+        tb.Button(btn_row, text=_("registry.delete"), bootstyle="danger",
                   command=self._delete_selected_registry, width=14).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text="🧹 Очистити биті", command=self._clean_dead_registry,
+        tb.Button(btn_row, text=_("registry.clean_dead"), command=self._clean_dead_registry,
                   width=14).pack(side=LEFT)
         self._refresh_registry_tree()
 
         # --- Cache ---
-        frame = tb.LabelFrame(parent, text="Кеш моделей")
-        frame.grid(row=4, column=0, sticky=EW, pady=5, padx=10)
+        frame = tb.LabelFrame(parent, text=_("cache.frame"))
+        frame.grid(row=5, column=0, sticky=EW, pady=5, padx=10)
         frame.columnconfigure(0, weight=1)
 
         btn_row = tb.Frame(frame)
         btn_row.grid(row=0, column=0, sticky=W, pady=(5, 0), padx=5)
-        tb.Button(btn_row, text="🔄 Оновити", command=self._refresh_cache_list,
+        tb.Button(btn_row, text=_("cache.refresh"), command=self._refresh_cache_list,
                   width=14).pack(side=LEFT, padx=(0, 5))
-        tb.Button(btn_row, text="🗑 Видалити обране", bootstyle="danger",
+        tb.Button(btn_row, text=_("cache.delete_selected"), bootstyle="danger",
                   command=self._delete_selected_cache).pack(side=LEFT)
 
         columns = ("name", "type", "size", "date")
         self.cache_tree = ttk.Treeview(frame, columns=columns, show="headings",
                                        height=6, selectmode="extended")
-        self.cache_tree.heading("name", text="Назва")
-        self.cache_tree.heading("type", text="Тип")
-        self.cache_tree.heading("size", text="Розмір")
-        self.cache_tree.heading("date", text="Дата")
+        self.cache_tree.heading("name", text=_("cache.col_name"))
+        self.cache_tree.heading("type", text=_("cache.col_type"))
+        self.cache_tree.heading("size", text=_("cache.col_size"))
+        self.cache_tree.heading("date", text=_("cache.col_date"))
         self.cache_tree.column("name", width=320)
         self.cache_tree.column("type", width=80)
         self.cache_tree.column("size", width=90, anchor="e")
@@ -392,6 +404,11 @@ class Audio2TextApp(tb.Window):
             self.style.theme_use(name)
             save_settings({"theme": name})
 
+    def _on_lang_change(self, event=None):
+        lang = self.lang_var.get()
+        if lang != _inst.current:
+            _inst.switch_to(lang)
+
     # ---------- cache ----------
     def _refresh_cache_list(self):
         for item in self.cache_tree.get_children():
@@ -402,16 +419,16 @@ class Audio2TextApp(tb.Window):
             self.cache_tree.insert("", tk.END, values=(
                 e["name"], e["type"], _format_size(e["size"]), e["date"]))
             total += e["size"]
-        self.cache_total_var.set(f"Загалом: {_format_size(total)}")
+        self.cache_total_var.set(_("cache.total", size=_format_size(total)))
 
     def _delete_selected_cache(self):
         sel = self.cache_tree.selection()
         if not sel:
-            messagebox.showinfo("Кеш моделей", "Виберіть моделі для видалення.")
+            messagebox.showinfo(_("cache.frame"), _("cache.info_nothing_selected"))
             return
         names = [self.cache_tree.item(i, "values")[0] for i in sel]
-        msg = f"Видалити {len(sel)} моделей?\n\n" + "\n".join(names)
-        if not messagebox.askyesno("Підтвердження", msg, icon="warning"):
+        msg = _("cache.confirm_delete", n=len(sel), details="\n".join(names))
+        if not messagebox.askyesno(_("common.confirm"), msg, icon="warning"):
             return
         indices = [self.cache_tree.index(i) for i in sel]
         for idx in sorted(indices, reverse=True):
@@ -423,7 +440,7 @@ class Audio2TextApp(tb.Window):
                 elif os.path.isdir(path):
                     shutil.rmtree(path)
             except Exception as ex:
-                messagebox.showerror("Помилка", f"Не вдалося видалити {e['name']}:\n{ex}")
+                messagebox.showerror(_("common.error"), _("cache.err_delete", name=e["name"], err=ex))
         self._refresh_cache_list()
 
     # ---------- registry ----------
@@ -433,9 +450,9 @@ class Audio2TextApp(tb.Window):
             self.reg_tree.delete(item)
         entries = reg.load_registry()
         if not entries:
-            self.reg_tree.insert("", tk.END, values=("(немає)", "", ""))
+            self.reg_tree.insert("", tk.END, values=(_("registry.empty_placeholder"), "", ""))
         for e in entries:
-            status = "✅" if e["status"] == "ok" else "❌"
+            status = _("registry.status_ok") if e["status"] == "ok" else _("registry.status_dead")
             self.reg_tree.insert("", tk.END, values=(e["name"], e["path"], status))
 
     def _delete_selected_registry(self):
@@ -443,19 +460,19 @@ class Audio2TextApp(tb.Window):
         if not sel:
             return
         name = self.reg_tree.item(sel[0], "values")[0]
-        if not name or name == "(немає)":
+        if not name or name == _("registry.empty_placeholder"):
             return
-        if messagebox.askyesno("Реєстр", f"Видалити «{name}» з реєстру?", icon="warning"):
+        if messagebox.askyesno(_("registry.frame"), _("registry.confirm_delete", name=name), icon="warning"):
             remove_entry(name)
             self._refresh_registry_tree()
 
     def _clean_dead_registry(self):
         dead = list_dead()
         if not dead:
-            messagebox.showinfo("Реєстр", "Немає битих записів.")
+            messagebox.showinfo(_("registry.frame"), _("registry.info_no_dead"))
             return
-        msg = "Видалити биті записи?\n\n" + "\n".join(e["name"] + " — " + e["path"] for e in dead)
-        if messagebox.askyesno("Реєстр", msg, icon="warning"):
+        msg = _("registry.confirm_clean", entries="\n".join(e["name"] + " — " + e["path"] for e in dead))
+        if messagebox.askyesno(_("registry.frame"), msg, icon="warning"):
             for e in dead:
                 remove_entry(e["name"])
             self._refresh_registry_tree()
@@ -500,19 +517,19 @@ class Audio2TextApp(tb.Window):
         result: dict = {}
 
         row = 0
-        tb.Label(dialog, text="Назва:").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=(10, 2))
+        tb.Label(dialog, text=_("profiles.dialog_name")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=(10, 2))
         name_var = tk.StringVar(value=(initial or {}).get("_name", ""))
         tb.Entry(dialog, textvariable=name_var, width=40).grid(row=row, column=1, sticky=EW, padx=(0, 10), pady=(10, 2))
 
         row += 1
-        tb.Label(dialog, text="Режим:").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_mode")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         mode_var = tk.StringVar(value=(initial or {}).get("mode", "file"))
         mode_cb = tb.Combobox(dialog, textvariable=mode_var, values=["file", "realtime"],
                               state="readonly", width=20)
         mode_cb.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
-        tb.Label(dialog, text="Модель:").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_model")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         MODELS = ["tiny", "base", "small", "medium", "large-v1", "large-v2", "large-v3",
                   "large", "distil-large-v2", "distil-large-v3", "distil-large-v3.5",
                   "large-v3-turbo", "turbo"]
@@ -533,49 +550,49 @@ class Audio2TextApp(tb.Window):
         _update_model_status()
 
         row += 1
-        tb.Label(dialog, text="Опис:").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_desc")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         desc_var = tk.StringVar(value=(initial or {}).get("description", ""))
         tb.Entry(dialog, textvariable=desc_var, width=50).grid(row=row, column=1, sticky=EW, padx=(0, 10), pady=2)
 
         row += 1
-        tb.Label(dialog, text="Мова (код):").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_lang_code")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         lang_var = tk.StringVar(value=(initial or {}).get("language", "uk"))
         tb.Entry(dialog, textvariable=lang_var, width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
         align_var = tk.BooleanVar(value=(initial or {}).get("align", False))
-        tb.Checkbutton(dialog, text="Вирівнювання (align)", variable=align_var).grid(
+        tb.Checkbutton(dialog, text=_("profiles.dialog_align"), variable=align_var).grid(
             row=row, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=2)
 
         row += 1
         diarize_var = tk.BooleanVar(value=(initial or {}).get("diarize", False))
-        tb.Checkbutton(dialog, text="Діаризація (diarize)", variable=diarize_var).grid(
+        tb.Checkbutton(dialog, text=_("profiles.dialog_diarize"), variable=diarize_var).grid(
             row=row, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=2)
 
         row += 1
-        tb.Label(dialog, text="Чанки (хв, 0 = вимк.):").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_chunk")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         chunk_var = tk.IntVar(value=(initial or {}).get("chunk_minutes", 0))
         tb.Spinbox(dialog, from_=0, to=60, textvariable=chunk_var, width=8).grid(
             row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
-        tb.Label(dialog, text="Потоків (max_workers):").grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_workers")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         workers_var = tk.IntVar(value=(initial or {}).get("max_workers", 2))
         tb.Spinbox(dialog, from_=1, to=8, textvariable=workers_var, width=8).grid(
             row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
-        filter_lbl = tb.Label(dialog, text="Фільтр аудіо:")
+        filter_lbl = tb.Label(dialog, text=_("profiles.dialog_filter"))
         filter_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        _ToolTip(filter_lbl, "full — afftdn+loudnorm (якісно, ~12 хв)\nlight — highpass+lowpass (швидко, ~2 хв)\noff — без обробки")
+        _ToolTip(filter_lbl, _("profiles.dialog_filter_tooltip"))
         filter_var = tk.StringVar(value=(initial or {}).get("clean_filter", "full"))
         tb.Combobox(dialog, textvariable=filter_var, values=["full", "light", "off"],
                     state="readonly", width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
-        cpu_lbl = tb.Label(dialog, text="Навантаження CPU:")
+        cpu_lbl = tb.Label(dialog, text=_("profiles.dialog_cpu"))
         cpu_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        _ToolTip(cpu_lbl, "Високе — всі ядра (default)\nСереднє — половина ядер, nice=10\nНизьке — 1 потік, nice=19")
+        _ToolTip(cpu_lbl, _("profiles.dialog_cpu_tooltip"))
         cpu_profile_var = tk.StringVar(value=(initial or {}).get("cpu_profile", "high"))
         tb.Combobox(dialog, textvariable=cpu_profile_var, values=list(cpu_levels),
                     state="readonly", width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
@@ -583,7 +600,7 @@ class Audio2TextApp(tb.Window):
         def on_save():
             name = name_var.get().strip()
             if not name:
-                messagebox.showwarning("Помилка", "Назва профілю обов'язкова.", parent=dialog)
+                messagebox.showwarning(_("common.error"), _("profiles.dialog_err_name_required"), parent=dialog)
                 return
             cfg = {
                 "description": desc_var.get().strip(),
@@ -605,52 +622,52 @@ class Audio2TextApp(tb.Window):
         row += 1
         btn_frame = tb.Frame(dialog)
         btn_frame.grid(row=row, column=0, columnspan=2, pady=(15, 10))
-        tb.Button(btn_frame, text="💾 Зберегти", bootstyle="success",
+        tb.Button(btn_frame, text=_("profiles.dialog_save"), bootstyle="success",
                   command=on_save, width=16).pack(side=LEFT, padx=(0, 10))
-        tb.Button(btn_frame, text="Скасувати", command=dialog.destroy,
+        tb.Button(btn_frame, text=_("profiles.dialog_cancel"), command=dialog.destroy,
                   width=12).pack(side=LEFT)
 
         self.wait_window(dialog)
         return result if result.get("_saved") else None
 
     def _add_profile_dialog(self):
-        result = self._open_profile_dialog("➕ Додати профіль")
+        result = self._open_profile_dialog(_("profiles.dialog_add_title"))
         if result:
             self._refresh_profile_list()
 
     def _edit_selected_profile(self):
         sel = self.profile_tree.selection()
         if not sel:
-            messagebox.showinfo("Профілі", "Виберіть профіль зі списку.")
+            messagebox.showinfo(_("profiles.frame"), _("profiles.err_select_for_edit"))
             return
         name = self.profile_tree.item(sel[0], "values")[0]
         cfg = get_profile(name)
         if not cfg:
             return
         cfg["_name"] = name
-        result = self._open_profile_dialog(f"✏️ Редагувати: {name}", initial=cfg)
+        result = self._open_profile_dialog(_("profiles.dialog_edit_title", name=name), initial=cfg)
         if result:
             self._refresh_profile_list()
 
     def _delete_selected_profile(self):
         sel = self.profile_tree.selection()
         if not sel:
-            messagebox.showinfo("Профілі", "Виберіть профіль зі списку.")
+            messagebox.showinfo(_("profiles.frame"), _("profiles.err_select_for_delete"))
             return
         name = self.profile_tree.item(sel[0], "values")[0]
-        if not messagebox.askyesno("Підтвердження", f"Видалити профіль «{name}»?", icon="warning"):
+        if not messagebox.askyesno(_("common.confirm"), _("profiles.confirm_delete", name=name), icon="warning"):
             return
         if delete_profile(name):
             self._refresh_profile_list()
         else:
-            messagebox.showerror("Помилка", f"Не вдалося видалити «{name}».")
+            messagebox.showerror(_("common.error"), _("profiles.err_delete_failed", name=name))
 
     # ---------- token ----------
     def _load_token_state(self):
         token, source = load_token()
         if token:
             self.token_var.set(token)
-            lbl = {"env": "🔑 змінна HF_TOKEN", "keychain": "🔑 системне сховище"}.get(source, "")
+            lbl = {"env": _("token.from_env"), "keychain": _("token.from_keychain")}.get(source, "")
             self.token_status_var.set(lbl)
 
         if has_keyring():
@@ -659,20 +676,18 @@ class Audio2TextApp(tb.Window):
     def _save_token(self):
         token = self.token_var.get().strip()
         if not token:
-            messagebox.showwarning("Помилка", "Введіть токен.")
+            messagebox.showwarning(_("common.error"), _("token.err_empty"))
             return
 
         if not has_keyring():
-            messagebox.showerror("Помилка",
-                "Системне сховище недоступне. Встановіть змінну середовища HF_TOKEN\n"
-                "або налаштуйте keyring (sudo apt install python3-keyring на Linux).")
+            messagebox.showerror(_("common.error"), _("token.err_keychain"))
             return
 
         try:
             save_token(token, self.token_mode_cb.get())
-            self.token_status_var.set("✅ токен збережено в системному сховищі")
+            self.token_status_var.set(_("token.saved"))
         except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося зберегти токен:\n{e}")
+            messagebox.showerror(_("common.error"), _("token.err_save", e=e))
 
     # ---------- file ----------
     def _update_profile_desc(self, event=None):
@@ -685,15 +700,15 @@ class Audio2TextApp(tb.Window):
             self.profile_desc_var.set("")
             return
         parts = [cfg.get("description", "")]
-        diar = "👤 діаризація" if cfg.get("diarize") else ""
-        align = "🎯 вирівнювання" if cfg.get("align") else ""
+        diar = _("profile.diarize_mark") if cfg.get("diarize") else ""
+        align = _("profile.align_mark") if cfg.get("align") else ""
         extras = " · ".join(filter(None, [align, diar]))
         chunk = cfg.get("chunk_minutes", 0)
         if chunk:
-            extras += f" · 🧩 {chunk}хв"
+            extras += _("profile.chunk_mark", n=chunk)
         cpu = cfg.get("cpu_profile", "high")
         if cpu != "high":
-            extras += f" · ⚡{cpu}"
+            extras += _("profile.cpu_mark", level=cpu)
         if extras:
             parts.append(f"[{extras}]")
         self.profile_desc_var.set("  " + "  ".join(parts))
@@ -702,8 +717,8 @@ class Audio2TextApp(tb.Window):
 
     def _browse_file(self):
         path = filedialog.askopenfilename(
-            title="Виберіть аудіофайл",
-            filetypes=[("Аудіо", "*.m4a *.wav *.mp3 *.ogg"), ("Всі файли", "*.*")])
+            title=_("file.dialog_title"),
+            filetypes=[(_("file.dialog_filter_name"), _("file.dialog_filter_pattern")), (_("file.dialog_all_files"), "*.*")])
         if path:
             self.file_var.set(path)
 
@@ -715,7 +730,7 @@ class Audio2TextApp(tb.Window):
         if names:
             self.reg_cb.set("")
         else:
-            self.reg_cb.set("(немає збережених файлів)")
+            self.reg_cb.set(_("registry.empty_combobox"))
 
     def _on_registry_pick(self, event=None):
         name = self._reg_refresh_var.get()
@@ -729,14 +744,14 @@ class Audio2TextApp(tb.Window):
     def _add_to_registry(self):
         path = self.file_var.get().strip()
         if not path or not os.path.exists(path):
-            messagebox.showwarning("Реєстр", "Виберіть існуючий файл.")
+            messagebox.showwarning(_("registry.frame"), _("registry.err_no_file"))
             return
         err = add_external(path)
         if err:
-            messagebox.showwarning("Реєстр", err)
+            messagebox.showwarning(_("registry.frame"), _("registry.err_add_failed", err=err))
         else:
             self._refresh_registry_list()
-            messagebox.showinfo("Реєстр", "Файл додано до реєстру.")
+            messagebox.showinfo(_("registry.frame"), _("registry.info_added"))
 
     # ---------- run ----------
     def _get_token(self) -> str | None:
@@ -752,27 +767,27 @@ class Audio2TextApp(tb.Window):
 
         file_path = self.file_var.get().strip()
         if not file_path or not os.path.exists(file_path):
-            messagebox.showwarning("Помилка", "Виберіть існуючий аудіофайл.")
+            messagebox.showwarning(_("common.error"), _("run.err_no_file"))
             return
 
         token = self._get_token()
         if not token:
-            messagebox.showwarning("Помилка", "Введіть HF_TOKEN (або збережіть його).")
+            messagebox.showwarning(_("common.error"), _("run.err_no_token"))
             return
 
         profile_name = self.profile_var.get()
         if not profile_name:
-            messagebox.showwarning("Помилка", "Виберіть профіль.")
+            messagebox.showwarning(_("common.error"), _("run.err_no_profile"))
             return
 
         cfg = get_profile(profile_name)
         if not cfg:
-            messagebox.showwarning("Помилка", f"Профіль '{profile_name}' не знайдено.")
+            messagebox.showwarning(_("common.error"), _("run.err_profile_not_found", name=profile_name))
             return
 
         self._running = True
         self._stop_event = threading.Event()
-        self.run_btn.configure(text="✕ Скасувати", bootstyle="danger", command=self._cancel)
+        self.run_btn.configure(text=_("run.cancel"), bootstyle="danger", command=self._cancel)
         self.progress.start(10)
         self.eta_var.set("")
         self.log_text.configure(state=tk.NORMAL)
@@ -789,12 +804,11 @@ class Audio2TextApp(tb.Window):
     def _cancel(self):
         if self._stop_event:
             self._stop_event.set()
-        self.run_btn.configure(state=DISABLED, text="⏳ Скасування...")
+        self.run_btn.configure(state=DISABLED, text=_("run.cancelling"))
 
     def _on_close(self):
         if self._running:
-            if messagebox.askyesno("Підтвердження",
-                                   "Транскрипція ще виконується.\nСкасувати та вийти?"):
+            if messagebox.askyesno(_("common.confirm"), _("run.confirm_exit")):
                 self._cancel()
                 self.destroy()
         else:
@@ -802,7 +816,7 @@ class Audio2TextApp(tb.Window):
 
     def _switch_to_log(self):
         for i in range(self._notebook.index("end")):
-            if self._notebook.tab(i, "text") == "Лог":
+            if self._notebook.tab(i, "text") == _("tab.log"):
                 self._notebook.select(i)
                 break
 
@@ -830,12 +844,12 @@ class Audio2TextApp(tb.Window):
             )
             transcriber.transcribe(file_path)
         except DownloadCancelledError as e:
-            msg = str(e) or "❌ Завантаження скасовано.\n"
+            msg = str(e) or _("run.log_cancelled")
             self._log_queue.put(msg + "\n")
         except TranscriptionCancelledError:
-            self._log_queue.put("⏹ Скасовано користувачем.\n")
+            self._log_queue.put(_("run.log_stopped"))
         except Exception as e:
-            self._log_queue.put(f"❌ Помилка: {e}\n")
+            self._log_queue.put(_("run.log_error", e=e))
         finally:
             sys.stdout = old_stdout
             self._running = False
@@ -862,12 +876,12 @@ class Audio2TextApp(tb.Window):
             self.after(200, self._poll_worker)
 
     def _on_done(self):
-        self.run_btn.configure(state=NORMAL, text="▶ Запустити",
+        self.run_btn.configure(state=NORMAL, text=_("run.start"),
                                bootstyle="success", command=self._run)
         self.progress.stop()
         self.eta_var.set("")
         self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, "\n✅ Готово.\n")
+        self.log_text.insert(tk.END, _("run.done"))
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
 
@@ -875,7 +889,6 @@ class Audio2TextApp(tb.Window):
 def run_gui():
     from logger import check_ffmpeg
     if not check_ffmpeg():
-        messagebox.showerror("Помилка",
-                             "ffmpeg не знайдено.\nВстановіть ffmpeg для коректної роботи.")
+        messagebox.showerror(_("common.error"), _("ffmpeg.err_not_found"))
         return
     Audio2TextApp().mainloop()
