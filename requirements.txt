@@ -8,3 +8,5 @@ python-dotenv
 pyyaml
 platformdirs
 ttkbootstrap
+keyring
+psutil

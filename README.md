@@ -21,7 +21,7 @@
 
 ### Windows ( Portable )
 
-1. Завантажте **Audio2Text-vX.X.X-windows.zip** з [Releases](https://github.com/anomalyco/Audio2Text/releases)
+1. Завантажте **Audio2Text-vX.X.X-windows.zip** з [Releases](https://github.com/toldk98/audio2text/releases)
 2. Розпакуйте в будь-яку папку (наприклад `C:\Programs\Audio2Text`)
 3. Запустіть `install.ps1` (правою кнопкою → "Run with PowerShell" або у терміналі виконайте `powershell -ExecutionPolicy Bypass -File install.ps1`)
 4. Після встановлення запускайте Audio2Text через меню **Пуск** або `audio2text.bat`
@@ -32,7 +32,7 @@
 
 ### Linux ( Portable )
 
-1. Завантажте **Audio2Text-vX.X.X-linux.tar.gz** з [Releases](https://github.com/anomalyco/Audio2Text/releases)
+1. Завантажте **Audio2Text-vX.X.X-linux.tar.gz** з [Releases](https://github.com/toldk98/audio2text/releases)
 2. Розпакуйте: `tar -xzf Audio2Text-vX.X.X-linux.tar.gz`
 3. Запустіть установку: `cd Audio2Text && bash install.sh`
 4. Запускайте через меню додатків або командою `audio2text`
@@ -41,7 +41,7 @@
 
 ```bash
 # Python 3.10+
-git clone https://github.com/anomalyco/Audio2Text
+git clone https://github.com/toldk98/audio2text
 cd Audio2Text
 
 # Віртуальне середовище
@@ -162,7 +162,7 @@ file:
 1. Відкрийте **Командний рядок** (`cmd.exe`)
 2. Перейдіть у папку з Audio2Text: `cd C:\шлях\до\Audio2Text`
 3. Запустіть вручну: `audio2text.bat`
-4. Скопіюйте текст помилки та створіть [issue](https://github.com/anomalyco/Audio2Text/issues)
+4. Скопіюйте текст помилки та створіть [issue](https://github.com/toldk98/audio2text/issues)
 
 ### Linux — "command not found: audio2text"
 
