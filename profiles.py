@@ -14,8 +14,6 @@ EMBEDDED_PROFILES = {
             "quick_uk": {
                 "description": "Швидка транскрипція (tiny), без діаризації",
                 "language": "uk",
-                "clean_mode": "temp",
-                "post_action": "delete",
                 "align": False,
                 "diarize": False,
             }
@@ -24,8 +22,6 @@ EMBEDDED_PROFILES = {
             "base_uk": {
                 "description": "Базова транскрипція (base), без діаризації",
                 "language": "uk",
-                "clean_mode": "temp",
-                "post_action": "delete",
                 "align": True,
                 "diarize": False,
             }
@@ -34,8 +30,6 @@ EMBEDDED_PROFILES = {
             "small_uk": {
                 "description": "Транскрипція (small), без діаризації",
                 "language": "uk",
-                "clean_mode": "temp",
-                "post_action": "delete",
                 "align": True,
                 "diarize": False,
             }
@@ -44,8 +38,6 @@ EMBEDDED_PROFILES = {
             "medium_uk": {
                 "description": "Транскрипція (medium), без діаризації",
                 "language": "uk",
-                "clean_mode": "temp",
-                "post_action": "delete",
                 "align": True,
                 "diarize": False,
             }
@@ -54,18 +46,14 @@ EMBEDDED_PROFILES = {
             "legacy_large_v1_uk": {
                 "description": "Повна транскрипція (large-v1) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "legacy_large_v1_en": {
                 "description": "Full transcription (large-v1) + diarization",
                 "language": "en",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
@@ -74,18 +62,14 @@ EMBEDDED_PROFILES = {
             "legacy_large_v2_uk": {
                 "description": "Повна транскрипція (large-v2) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "legacy_large_v2_en": {
                 "description": "Full transcription (large-v2) + diarization",
                 "language": "en",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
@@ -94,18 +78,14 @@ EMBEDDED_PROFILES = {
             "legacy_large_uk": {
                 "description": "Повна транскрипція (large) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "legacy_large_en": {
                 "description": "Full transcription (large) + diarization",
                 "language": "en",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
@@ -114,18 +94,14 @@ EMBEDDED_PROFILES = {
             "full_uk": {
                 "description": "Повна транскрипція (large-v3) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "full_uk_chunked": {
                 "description": "Повна (large-v3) + діаризація, з розбиттям на частини",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
                 "chunk_minutes": 10,
@@ -135,9 +111,7 @@ EMBEDDED_PROFILES = {
             "full_en": {
                 "description": "Full transcription (large-v3) + diarization",
                 "language": "en",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
@@ -146,18 +120,14 @@ EMBEDDED_PROFILES = {
             "distil_v2_uk": {
                 "description": "Швидка транскрипція (distil-large-v2) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "distil_v2_uk_chunked": {
                 "description": "Швидка (distil-large-v2) + діаризація, з розбиттям на частини",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
                 "chunk_minutes": 10,
@@ -169,18 +139,14 @@ EMBEDDED_PROFILES = {
             "distil_v3_uk": {
                 "description": "Швидка транскрипція (distil-large-v3) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "distil_v3_uk_chunked": {
                 "description": "Швидка (distil-large-v3) + діаризація, з розбиттям на частини",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
                 "chunk_minutes": 10,
@@ -192,18 +158,14 @@ EMBEDDED_PROFILES = {
             "distil_v35_uk": {
                 "description": "Швидка транскрипція (distil-large-v3.5) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "distil_v35_uk_chunked": {
                 "description": "Швидка (distil-large-v3.5) + діаризація, з розбиттям на частини",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
                 "chunk_minutes": 10,
@@ -215,18 +177,14 @@ EMBEDDED_PROFILES = {
             "turbo_uk": {
                 "description": "Дуже швидка транскрипція (large-v3-turbo) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "turbo_uk_chunked": {
                 "description": "Дуже швидка (large-v3-turbo) + діаризація, з розбиттям на частини",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
                 "chunk_minutes": 10,
@@ -236,9 +194,7 @@ EMBEDDED_PROFILES = {
             "turbo_en": {
                 "description": "Fast full transcription (large-v3-turbo) + diarization",
                 "language": "en",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
@@ -247,18 +203,14 @@ EMBEDDED_PROFILES = {
             "turbo_alt_uk": {
                 "description": "Дуже швидка транскрипція (turbo) + діаризація",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
             },
             "turbo_alt_uk_chunked": {
                 "description": "Дуже швидка (turbo) + діаризація, з розбиттям на частини",
                 "language": "uk",
-                "clean_mode": "custom",
-                "clean_dir": "./clean",
-                "post_action": "keep",
+                
                 "align": True,
                 "diarize": True,
                 "chunk_minutes": 10,

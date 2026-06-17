@@ -249,8 +249,7 @@ print(f'  Align:       {{"\u2705" if c.get("align") else "\u274c"}}')
 print(f'  Diarize:     {{"\U0001f464" if c.get("diarize") else "\u274c"}}')
 if c.get("chunk_minutes", 0) > 0:
     print(f'  Chunked:     {{c["chunk_minutes"]}} min ({{c.get("max_workers",2)}} workers)')
-print(f'  Clean mode:  {{c.get("clean_mode","-")}}')
-print(f'  Post action: {{c.get("post_action","-")}}')
+print(f'  Clean filter: {{c.get("clean_filter","full")}}')
 print()
 print(f'  {{c.get("description","")}}')
 """)
@@ -289,11 +288,7 @@ def _edit_cfg(cfg: dict) -> dict:
         items = []
         items.append(f"Language         {cfg.get('language', 'uk')}{tab}language")
         if cfg.get("mode") == "file":
-            clean = cfg.get("clean_mode", "temp")
-            if clean == "custom":
-                clean += f" ({cfg.get('clean_dir', '?')})"
-            items.append(f"Clean mode       {clean}{tab}clean_mode")
-            items.append(f"Post action      {cfg.get('post_action', 'delete')}{tab}post_action")
+            items.append(f"Clean filter     {cfg.get('clean_filter', 'full')}{tab}clean_filter")
             items.append(f"Diarization      {'yes' if cfg.get('diarize', False) else 'no'}{tab}diarize")
             items.append(f"Chunk minutes    {cfg.get('chunk_minutes', 0)}{tab}chunk_minutes")
         if cfg.get("mode") == "realtime":
@@ -349,14 +344,14 @@ def _run_file_mode(cfg: dict, audio_path: str):
         hf_token=hf_token,
         model_size=cfg.get("model", "large-v3"),
         language=cfg.get("language", "uk"),
-        clean_mode=cfg.get("clean_mode", "temp"),
-        clean_dir=cfg.get("clean_dir"),
-        post_action=cfg.get("post_action", "delete"),
-        post_dir=cfg.get("post_dir"),
+        clean_filter=cfg.get("clean_filter", "full"),
         do_align=cfg.get("align", True),
         do_diarize=cfg.get("diarize", True),
         chunk_minutes=cfg.get("chunk_minutes", 0),
         max_workers=cfg.get("max_workers", 2),
+        cpu_profile=cfg.get("cpu_profile", "high"),
+        allow_download=True,
+        stop_event=None,
     )
     transcriber.transcribe(audio_path)
 
