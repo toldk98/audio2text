@@ -67,6 +67,11 @@ def build_parser():
 
 
 def run_cli():
+    from logger import check_ffmpeg
+    if not check_ffmpeg():
+        print("❌ ffmpeg не знайдено. Встановіть ffmpeg для коректної роботи.")
+        sys.exit(1)
+
     parser = build_parser()
     args, remaining = parser.parse_known_args()
 

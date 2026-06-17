@@ -130,6 +130,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
+                "cpu_profile": "medium",
             },
             "full_en": {
                 "description": "Full transcription (large-v3) + diarization",
@@ -161,6 +162,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
+                "cpu_profile": "medium",
             },
         },
         "distil-large-v3": {
@@ -183,6 +185,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
+                "cpu_profile": "medium",
             },
         },
         "distil-large-v3.5": {
@@ -205,6 +208,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
+                "cpu_profile": "medium",
             },
         },
         "large-v3-turbo": {
@@ -227,6 +231,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
+                "cpu_profile": "medium",
             },
             "turbo_en": {
                 "description": "Fast full transcription (large-v3-turbo) + diarization",
@@ -258,6 +263,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
+                "cpu_profile": "medium",
             },
         },
     },

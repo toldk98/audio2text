@@ -8,7 +8,10 @@ import sounddevice as sd
 import torch
 import whisperx
 
+from logger import get_logger
 from whisper_offline import _confirm_download, DownloadCancelledError
+
+logger = get_logger(__name__)
 
 
 class WhisperRealtimeTranscriber:
@@ -40,8 +43,8 @@ class WhisperRealtimeTranscriber:
         self.time_process = time.time()
         self.session_start_time = None
 
-        print(f"[INFO] Ініціалізація WhisperRealtimeTranscriber...")
-        print(f"[INFO] Пристрій: {self.device}, модель: {self.model_size}")
+        logger.info(f"[INFO] Ініціалізація WhisperRealtimeTranscriber...")
+        logger.info(f"[INFO] Пристрій: {self.device}, модель: {self.model_size}")
 
         _confirm_download(self.model_size, do_align=False, do_diarize=False)
 
@@ -53,7 +56,7 @@ class WhisperRealtimeTranscriber:
             compute_type=self.compute_type,
         )
         t1 = time.time()
-        print(f"[TIME] Модель завантажена за {t1 - t0:.2f} с")
+        logger.info(f"[TIME] Модель завантажена за {t1 - t0:.2f} с")
 
         self.recording = False
         self.q = queue.Queue()
@@ -64,18 +67,18 @@ class WhisperRealtimeTranscriber:
 
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
-            print(status)
+            logger.info(status)
         self.q.put(indata.copy())
 
     def _record_audio(self):
-        print("[🎙️] Почато запис. Натисни Ctrl+C для зупинки.")
-        print(self._elapsed("Старт аудіозахоплення"))
+        logger.info("[🎙️] Почато запис. Натисни Ctrl+C для зупинки.")
+        logger.info(self._elapsed("Старт аудіозахоплення"))
 
         mic_stream = None
         spk_stream = None
 
         if self.record_both:
-            print("[INFO] Режим запису обох потоків (мікрофон + динаміки).")
+            logger.info("[INFO] Режим запису обох потоків (мікрофон + динаміки).")
             mic_stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=1,
@@ -110,7 +113,7 @@ class WhisperRealtimeTranscriber:
                 while self.recording:
                     sd.sleep(200)
 
-        print(self._elapsed("Зупинка аудіозахоплення"))
+        logger.info(self._elapsed("Зупинка аудіозахоплення"))
 
     def _process_audio(self):
         buffer = np.array([], dtype=np.float32)
@@ -138,7 +141,7 @@ class WhisperRealtimeTranscriber:
                 block = buffer[: self.sample_rate * self.chunk_duration]
                 buffer = buffer[self.sample_rate * self.chunk_duration:]
 
-                print(f"\n[INFO] Обробка блоку {segment_id} ({self.chunk_duration}s)...")
+                logger.info(f"\n[INFO] Обробка блоку {segment_id} ({self.chunk_duration}s)...")
 
                 t_transcribe_start = time.time()
                 result = self.model.transcribe(block)
@@ -147,25 +150,25 @@ class WhisperRealtimeTranscriber:
                 text = result.get("text", "").strip()
                 if text:
                     elapsed_live = time.time() - realtime_pipeline_start
-                    print(f"[{elapsed_live:6.1f}s] 🗣️ {text}")
-                    print(f"[TIME] Блок {segment_id} розпізнано за {t_transcribe_end - t_transcribe_start:.2f} с")
+                    logger.info(f"[{elapsed_live:6.1f}s] 🗣️ {text}")
+                    logger.info(f"[TIME] Блок {segment_id} розпізнано за {t_transcribe_end - t_transcribe_start:.2f} с")
 
                 segment_id += 1
 
         if wf:
             wf.close()
-            print(f"[💾] Запис збережено: {self.out_file}")
+            logger.info(f"[💾] Запис збережено: {self.out_file}")
 
         total_session = 0.0
         if self.session_start_time is not None:
             total_session = time.time() - self.session_start_time
 
-        print(f"[🛑] Потік завершено. Загальний час сесії: {total_session:.2f} с")
-        print(self._elapsed("Обробку аудіопотоку завершено"))
+        logger.info(f"[🛑] Потік завершено. Загальний час сесії: {total_session:.2f} с")
+        logger.info(self._elapsed("Обробку аудіопотоку завершено"))
 
     def start(self):
         if self.recording:
-            print("[WARN] Запис уже триває.")
+            logger.warning("[WARN] Запис уже триває.")
             return
 
         self.session_start_time = time.time()
@@ -187,9 +190,9 @@ class WhisperRealtimeTranscriber:
         t_proc.join()
 
         total_session = time.time() - self.session_start_time
-        print(f"[DONE] Сесію завершено. Тривалість: {total_session:.2f} с")
-        print(self._elapsed("Сесія повністю завершена"))
+        logger.info(f"[DONE] Сесію завершено. Тривалість: {total_session:.2f} с")
+        logger.info(self._elapsed("Сесія повністю завершена"))
 
     def stop(self):
-        print("\n[INFO] Зупинка...")
+        logger.info("\n[INFO] Зупинка...")
         self.recording = False

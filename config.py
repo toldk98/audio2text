@@ -33,3 +33,9 @@ language_list = [
 ]
 
 chunk_options = [0, 5, 10, 15, 20, 30]
+
+cpu_levels = [
+    "high",
+    "medium",
+    "low",
+]

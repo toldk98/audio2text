@@ -15,6 +15,7 @@ from ttkbootstrap.constants import *
 from profiles import list_profiles, get_profile, upsert_profile, delete_profile
 from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry
 from gui.token_manager import load_token, save_token, get_storage_mode, MODES, has_keyring, load_settings, save_settings
+from config import cpu_levels
 
 
 class _ToolTip:
@@ -237,10 +238,22 @@ class Audio2TextApp(tb.Window):
         self.profile_cb.bind("<<ComboboxSelected>>", self._update_profile_desc)
         self._update_profile_desc()
 
+        # --- CPU Load ---
+        cpu_frame = tb.Frame(parent)
+        cpu_frame.grid(row=3, column=0, sticky=W, pady=(5, 0), padx=10)
+        tb.Label(cpu_frame, text="CPU:", foreground="gray").pack(side=LEFT, padx=(0, 5))
+        self.cpu_var = tk.StringVar(value="high")
+        self.cpu_cb = tb.Combobox(cpu_frame, textvariable=self.cpu_var,
+                                  values=list(cpu_levels), state="readonly", width=10)
+        self.cpu_cb.pack(side=LEFT)
+        _ToolTip(self.cpu_cb, "Високе — всі ядра\nСереднє — половина ядер\nНизьке — 1 потік, низький пріоритет")
+        cpu_hint = tb.Label(cpu_frame, text="(перевизначає профіль)", foreground="gray")
+        cpu_hint.pack(side=LEFT, padx=(8, 0))
+
         # --- Run ---
         self.run_btn = tb.Button(parent, text="▶ Запустити", bootstyle="success",
                                  command=self._run, width=20)
-        self.run_btn.grid(row=3, column=0, pady=(10, 5))
+        self.run_btn.grid(row=4, column=0, pady=(10, 5))
 
     def _build_log_tab(self, parent: tb.Frame):
         parent.columnconfigure(0, weight=1)
@@ -461,6 +474,9 @@ class Audio2TextApp(tb.Window):
                 opts.append("diar")
             if cfg.get("chunk_minutes", 0) > 0:
                 opts.append(f"chunk{cfg['chunk_minutes']}")
+            cpu = cfg.get("cpu_profile", "high")
+            if cpu != "high":
+                opts.append(f"cpu:{cpu}")
             opts_str = ", ".join(opts) if opts else "-"
             self.profile_tree.insert("", tk.END, values=(name, model, lang, opts_str))
         self._refresh_transcribe_profiles()
@@ -556,6 +572,14 @@ class Audio2TextApp(tb.Window):
         tb.Combobox(dialog, textvariable=filter_var, values=["full", "light", "off"],
                     state="readonly", width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
+        row += 1
+        cpu_lbl = tb.Label(dialog, text="Навантаження CPU:")
+        cpu_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        _ToolTip(cpu_lbl, "Високе — всі ядра (default)\nСереднє — половина ядер, nice=10\nНизьке — 1 потік, nice=19")
+        cpu_profile_var = tk.StringVar(value=(initial or {}).get("cpu_profile", "high"))
+        tb.Combobox(dialog, textvariable=cpu_profile_var, values=list(cpu_levels),
+                    state="readonly", width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+
         def on_save():
             name = name_var.get().strip()
             if not name:
@@ -569,6 +593,7 @@ class Audio2TextApp(tb.Window):
                 "chunk_minutes": chunk_var.get(),
                 "max_workers": workers_var.get(),
                 "clean_filter": filter_var.get(),
+                "cpu_profile": cpu_profile_var.get(),
                 "mode": mode_var.get(),
                 "model": model_var.get(),
             }
@@ -672,9 +697,14 @@ class Audio2TextApp(tb.Window):
         chunk = cfg.get("chunk_minutes", 0)
         if chunk:
             extras += f" · 🧩 {chunk}хв"
+        cpu = cfg.get("cpu_profile", "high")
+        if cpu != "high":
+            extras += f" · ⚡{cpu}"
         if extras:
             parts.append(f"[{extras}]")
         self.profile_desc_var.set("  " + "  ".join(parts))
+        # sync cpu combobox with profile default
+        self.cpu_var.set(cpu)
 
     def _browse_file(self):
         path = filedialog.askopenfilename(
@@ -801,11 +831,13 @@ class Audio2TextApp(tb.Window):
                 max_workers=cfg.get("max_workers", 2),
                 allow_download=self.allow_dl_var.get(),
                 clean_filter=cfg.get("clean_filter", "full"),
+                cpu_profile=self.cpu_var.get(),
                 stop_event=stop_event,
             )
             transcriber.transcribe(file_path)
-        except DownloadCancelledError:
-            self._log_queue.put("❌ Завантаження скасовано користувачем.\n")
+        except DownloadCancelledError as e:
+            msg = str(e) or "❌ Завантаження скасовано.\n"
+            self._log_queue.put(msg + "\n")
         except TranscriptionCancelledError:
             self._log_queue.put("⏹ Скасовано користувачем.\n")
         except Exception as e:
@@ -847,4 +879,9 @@ class Audio2TextApp(tb.Window):
 
 
 def run_gui():
+    from logger import check_ffmpeg
+    if not check_ffmpeg():
+        messagebox.showerror("Помилка",
+                             "ffmpeg не знайдено.\nВстановіть ffmpeg для коректної роботи.")
+        return
     Audio2TextApp().mainloop()
