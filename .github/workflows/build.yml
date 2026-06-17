@@ -58,6 +58,10 @@ jobs:
           chmod +x *.sh
           tar -czf "../audio2text-$VERSION-linux-x86_64.tar.gz" .
 
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
       - name: Pack and bundle (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -66,14 +70,17 @@ jobs:
           cp -r gui dist/
           cp scripts/*.bat scripts/*.ps1 dist/ 2>/dev/null || true
           conda-pack -n audio2text -o dist/audio2text-env.tar.gz
-          cd dist
-          7z a "../audio2text-$VERSION-windows-x86_64.zip" *
+          iscc "scripts\installer.iss" /dVERSION=$VERSION
+          move "Audio2Text-Setup-$VERSION-windows-x86_64.exe" .
+          dir *.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ runner.os }}
-          path: audio2text-${{ env.VERSION }}-*
+          path: |
+            audio2text-*-*
+            Audio2Text-Setup-*-*
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
