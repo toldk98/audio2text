@@ -4,6 +4,8 @@
 [![License](https://img.shields.io/github/license/toldk98/audio2text)](LICENSE)
 [![CI](https://github.com/toldk98/audio2text/actions/workflows/build.yml/badge.svg)](https://github.com/toldk98/audio2text/actions)
 
+> 💡 **Not Ukrainian?** See [English README](README_EN.md).
+
 Транскрибація аудіо в текст з використанням WhisperX, вирівнюванням (align) та діаризацією (розпізнаванням спікерів). Працює на CPU та NVIDIA GPU.
 
 ## Можливості
