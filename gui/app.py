@@ -236,8 +236,6 @@ class Audio2TextApp(tb.Window):
         self.profile_desc_var = tk.StringVar()
         tb.Label(frame, textvariable=self.profile_desc_var, foreground="gray", wraplength=600).grid(
             row=1, column=1, sticky=W, padx=(5, 0), pady=(3, 0))
-        self.profile_cb.bind("<<ComboboxSelected>>", self._update_profile_desc)
-        self._update_profile_desc()
 
         # --- CPU Load ---
         cpu_frame = tb.Frame(parent)
@@ -250,6 +248,9 @@ class Audio2TextApp(tb.Window):
         _ToolTip(self.cpu_cb, _("cpu.tooltip"))
         cpu_hint = tb.Label(cpu_frame, text=_("cpu.override_hint"), foreground="gray")
         cpu_hint.pack(side=LEFT, padx=(8, 0))
+
+        self.profile_cb.bind("<<ComboboxSelected>>", self._update_profile_desc)
+        self._update_profile_desc()
 
         # --- Run ---
         self.run_btn = tb.Button(parent, text=_("run.start"), bootstyle="success",
