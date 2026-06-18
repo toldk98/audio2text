@@ -5,8 +5,10 @@ import platformdirs
 
 SETTINGS_PATH = os.path.join(platformdirs.user_config_dir("audio2text"), "settings.json")
 
-MODES = {"keychain": "системне сховище (keychain)",
-         "ask":      "питати кожен запуск"}
+def _token_modes():
+    from gui.lang import _
+    return {"keychain": _("token.mode_keychain"),
+            "ask":      _("token.mode_ask")}
 
 
 def load_token() -> tuple[str | None, str | None]:

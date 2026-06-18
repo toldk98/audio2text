@@ -35,6 +35,9 @@
   "profile.cpu_mark": " · ⚡{level}",
 
   "cpu.label": "CPU:",
+  "cpu.level_high": "High",
+  "cpu.level_medium": "Medium",
+  "cpu.level_low": "Low",
   "cpu.tooltip": "High — all cores\nMedium — half cores\nLow — 1 thread, low priority",
   "cpu.override_hint": "(overrides profile)",
 
@@ -53,6 +56,11 @@
 
   "log.tab_title": "Log",
 
+  "settings.sub_general": "General",
+  "settings.sub_profiles": "Profiles",
+  "settings.sub_models": "Models",
+  "settings.sub_files": "Files",
+
   "settings.theme_frame": "Theme",
   "settings.theme_apply": "Apply",
   "settings.models_frame": "Models",
@@ -61,6 +69,8 @@
   "settings.lang_frame": "Interface Language",
   "settings.lang_label": "Language:",
   "settings.lang_restart_hint": "Restart the app for changes to take effect.",
+
+  "profiles.sub_file": "File",
 
   "profiles.frame": "Profiles",
   "profiles.col_name": "Name",
@@ -76,13 +86,28 @@
   "profiles.dialog_mode": "Mode:",
   "profiles.dialog_model": "Model:",
   "profiles.dialog_desc": "Description:",
-  "profiles.dialog_lang_code": "Language (code):",
-  "profiles.dialog_align": "Alignment (align)",
-  "profiles.dialog_diarize": "Diarization (diarize)",
+  "profiles.dialog_lang": "Language:",
+  "profiles.dialog_align": "Alignment:",
+  "profiles.dialog_diarize": "Diarization:",
   "profiles.dialog_chunk": "Chunks (min, 0 = off):",
   "profiles.dialog_workers": "Workers (max_workers):",
+  "filter.value_full": "Full",
+  "filter.value_light": "Light",
+  "filter.value_off": "Off",
+
+  "token.mode_keychain": "system keychain",
+  "token.mode_ask": "ask each launch",
+
+  "size.bytes": "B",
+  "size.kb": "KB",
+  "size.mb": "MB",
+  "size.gb": "GB",
+  "size.tb": "TB",
+
+  "profiles.dialog_workers_max": "(max {n})",
+
   "profiles.dialog_filter": "Audio filter:",
-  "profiles.dialog_filter_tooltip": "full — afftdn+loudnorm (quality, ~12 min)\nlight — highpass+lowpass (fast, ~2 min)\noff — no processing",
+  "profiles.dialog_filter_tooltip": "Full — afftdn+loudnorm (quality, ~12 min)\nLight — highpass+lowpass (fast, ~2 min)\nOff — no processing",
   "profiles.dialog_cpu": "CPU load:",
   "profiles.dialog_cpu_tooltip": "High — all cores (default)\nMedium — half cores, nice=10\nLow — 1 thread, nice=19",
   "profiles.dialog_err_name_required": "Profile name is required.",
@@ -123,5 +148,20 @@
   "cache.confirm_delete": "Delete {n} model(s)?\n\n{details}",
   "cache.err_delete": "Failed to delete {name}:\n{err}",
 
-  "ffmpeg.err_not_found": "ffmpeg not found.\nInstall ffmpeg for proper operation."
+  "ffmpeg.err_not_found": "ffmpeg not found.\nInstall ffmpeg for proper operation.",
+
+  "lang.uk": "Ukrainian",
+  "lang.en": "English",
+  "lang.pl": "Polish",
+  "lang.de": "German",
+  "lang.fr": "French",
+  "lang.es": "Spanish",
+  "lang.it": "Italian",
+  "lang.pt": "Portuguese",
+  "lang.nl": "Dutch",
+  "lang.ja": "Japanese",
+  "lang.zh": "Chinese",
+  "lang.ko": "Korean",
+  "lang.ar": "Arabic",
+  "lang.tr": "Turkish"
 }

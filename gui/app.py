@@ -14,7 +14,7 @@ from ttkbootstrap.constants import *
 
 from profiles import list_profiles, get_profile, upsert_profile, delete_profile
 from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry
-from gui.token_manager import load_token, save_token, MODES, has_keyring, load_settings, save_settings
+from gui.token_manager import load_token, save_token, _token_modes, has_keyring, load_settings, save_settings
 from config import cpu_levels
 from gui.lang import _, _inst
 
@@ -70,11 +70,12 @@ def _dir_size(path: str) -> int:
 
 
 def _format_size(size: int) -> str:
-    for unit in ("Б", "КБ", "МБ", "ГБ"):
+    units = [("size.bytes", "Б"), ("size.kb", "КБ"), ("size.mb", "МБ"), ("size.gb", "ГБ")]
+    for key, _fallback in units:
         if abs(size) < 1024:
-            return f"{size:.1f} {unit}"
+            return f"{size:.1f} {_(key)}"
         size /= 1024
-    return f"{size:.1f} ТБ"
+    return f"{size:.1f} {_('size.tb')}"
 
 
 def _scan_model_cache() -> list[dict]:
@@ -142,8 +143,16 @@ def _model_cache_status(model_size: str) -> str:
     return f"⚡ {size_str}" if size_str else "⚡"
 
 
-def _profile_names() -> list[str]:
-    return sorted(name for name, _ in list_profiles())
+def _profile_names(mode: str | None = None) -> list[str]:
+    return sorted(name for name, _ in list_profiles(mode=mode))
+
+
+def _cpu_display_map() -> dict[str, str]:
+    return {"high": _("cpu.level_high"), "medium": _("cpu.level_medium"), "low": _("cpu.level_low")}
+
+
+def _filter_display_map() -> dict[str, str]:
+    return {"full": _("filter.value_full"), "light": _("filter.value_light"), "off": _("filter.value_off")}
 
 
 class Audio2TextApp(tb.Window):
@@ -211,7 +220,7 @@ class Audio2TextApp(tb.Window):
 
         self.token_mode_var = tk.StringVar()
         self.token_mode_cb = tb.Combobox(frame, textvariable=self.token_mode_var,
-                                         values=list(MODES.values()), state="readonly", width=30)
+                                          values=list(_token_modes().values()), state="readonly", width=30)
         self.token_mode_cb.grid(row=0, column=2, padx=(0, 5))
 
         tb.Button(frame, text=_("token.save"), command=self._save_token).grid(row=0, column=3)
@@ -241,9 +250,10 @@ class Audio2TextApp(tb.Window):
         cpu_frame = tb.Frame(parent)
         cpu_frame.grid(row=3, column=0, sticky=W, pady=(5, 0), padx=10)
         tb.Label(cpu_frame, text=_("cpu.label"), foreground="gray").pack(side=LEFT, padx=(0, 5))
-        self.cpu_var = tk.StringVar(value="high")
+        cpu_disp = _cpu_display_map()
+        self.cpu_var = tk.StringVar(value=cpu_disp["high"])
         self.cpu_cb = tb.Combobox(cpu_frame, textvariable=self.cpu_var,
-                                  values=list(cpu_levels), state="readonly", width=10)
+                                  values=list(cpu_disp.values()), state="readonly", width=12)
         self.cpu_cb.pack(side=LEFT)
         _ToolTip(self.cpu_cb, _("cpu.tooltip"))
         cpu_hint = tb.Label(cpu_frame, text=_("cpu.override_hint"), foreground="gray")
@@ -278,32 +288,28 @@ class Audio2TextApp(tb.Window):
 
     def _build_settings_tab(self, parent: tb.Frame):
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(5, weight=1)
+        parent.rowconfigure(0, weight=1)
 
-        # --- Theme ---
-        frame = tb.LabelFrame(parent, text=_("settings.theme_frame"))
-        frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
-        frame.columnconfigure(1, weight=1)
+        sub = tb.Notebook(parent)
+        sub.grid(row=0, column=0, sticky=NSEW, padx=10, pady=(10, 10))
+
+        # --- Sub-tab: General (Theme + Language) ---
+        general = tb.Frame(sub)
+        general.columnconfigure(0, weight=1)
+        sub.add(general, text=_("settings.sub_general"))
+
+        theme_frame = tb.LabelFrame(general, text=_("settings.theme_frame"))
+        theme_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
+        theme_frame.columnconfigure(1, weight=1)
 
         self.theme_var = tk.StringVar(value=self.style.theme.name)
         themes = sorted(self.style.theme_names())
-        tb.Combobox(frame, textvariable=self.theme_var, values=themes,
+        tb.Combobox(theme_frame, textvariable=self.theme_var, values=themes,
                     state="readonly", width=30).grid(row=0, column=1, sticky=W, padx=(5, 5))
-        tb.Button(frame, text=_("settings.theme_apply"), command=self._apply_theme).grid(row=0, column=2)
+        tb.Button(theme_frame, text=_("settings.theme_apply"), command=self._apply_theme).grid(row=0, column=2)
 
-        # --- Models ---
-        frame = tb.LabelFrame(parent, text=_("settings.models_frame"))
-        frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
-
-        self.allow_dl_var = tk.BooleanVar(value=True)
-        tb.Checkbutton(frame, text=_("settings.models_auto"),
-                       variable=self.allow_dl_var).grid(row=0, column=0, sticky=W, pady=5, padx=5)
-        tb.Label(frame, text=_("settings.models_auto_hint"), foreground="gray", wraplength=600).grid(
-            row=1, column=0, sticky=W, padx=(15, 5), pady=(0, 5))
-
-        # --- Language ---
-        lang_frame = tb.LabelFrame(parent, text=_("settings.lang_frame"))
-        lang_frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
+        lang_frame = tb.LabelFrame(general, text=_("settings.lang_frame"))
+        lang_frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
         lang_frame.columnconfigure(1, weight=1)
         tb.Label(lang_frame, text=_("settings.lang_label")).grid(row=0, column=0, sticky=W, padx=(10, 5), pady=5)
         self.lang_var = tk.StringVar(value=_inst.current)
@@ -314,13 +320,31 @@ class Audio2TextApp(tb.Window):
         tb.Label(lang_frame, text=_("settings.lang_restart_hint"),
                  foreground="gray").grid(row=1, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=(0, 5))
 
-        # --- Profiles ---
-        frame = tb.LabelFrame(parent, text=_("profiles.frame"))
-        frame.grid(row=3, column=0, sticky=EW, pady=5, padx=10)
-        frame.columnconfigure(0, weight=1)
+        general.rowconfigure(2, weight=1)
 
-        self.profile_tree = ttk.Treeview(frame, columns=("name", "model", "lang", "opts"),
-                                         show="headings", height=5, selectmode="browse")
+        # --- Sub-tab: Profiles ---
+        profiles = tb.Frame(sub)
+        profiles.columnconfigure(0, weight=1)
+        profiles.rowconfigure(0, weight=1)
+        sub.add(profiles, text=_("settings.sub_profiles"))
+
+        sub2 = tb.Notebook(profiles)
+        sub2.grid(row=0, column=0, sticky=NSEW, padx=0, pady=0)
+
+        # v2.0: add realtime tab via sub2.add(realtime_tab, text=_("settings.sub_realtime"))
+
+        file_tab = tb.Frame(sub2)
+        file_tab.columnconfigure(0, weight=1)
+        file_tab.rowconfigure(0, weight=1)
+        sub2.add(file_tab, text=_("profiles.sub_file"))
+
+        pf_frame = tb.LabelFrame(file_tab, text=_("profiles.frame"))
+        pf_frame.grid(row=0, column=0, sticky=NSEW, pady=(10, 10), padx=10)
+        pf_frame.columnconfigure(0, weight=1)
+        pf_frame.rowconfigure(0, weight=1)
+
+        self.profile_tree = ttk.Treeview(pf_frame, columns=("name", "model", "lang", "opts"),
+                                         show="headings", selectmode="browse")
         self.profile_tree.heading("name", text=_("profiles.col_name"))
         self.profile_tree.heading("model", text=_("profiles.col_model"))
         self.profile_tree.heading("lang", text=_("profiles.col_lang"))
@@ -329,58 +353,48 @@ class Audio2TextApp(tb.Window):
         self.profile_tree.column("model", width=140)
         self.profile_tree.column("lang", width=50)
         self.profile_tree.column("opts", width=200)
-        self.profile_tree.grid(row=0, column=0, sticky=EW, pady=(5, 5), padx=5)
+        self.profile_tree.grid(row=0, column=0, sticky=NSEW, pady=(5, 5), padx=5)
         self.profile_tree.bind("<Double-1>", lambda e: self._edit_selected_profile())
 
-        btn_row = tb.Frame(frame)
-        btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
-        tb.Button(btn_row, text=_("profiles.add"), command=self._add_profile_dialog,
+        pf_btn_row = tb.Frame(pf_frame)
+        pf_btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
+        tb.Button(pf_btn_row, text=_("profiles.add"), command=self._add_profile_dialog,
                   width=12).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text=_("profiles.edit"), command=self._edit_selected_profile,
+        tb.Button(pf_btn_row, text=_("profiles.edit"), command=self._edit_selected_profile,
                   width=14).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text=_("profiles.delete"), bootstyle="danger",
+        tb.Button(pf_btn_row, text=_("profiles.delete"), bootstyle="danger",
                   command=self._delete_selected_profile, width=12).pack(side=LEFT)
 
-        # --- Registry ---
-        frame = tb.LabelFrame(parent, text=_("registry.frame"))
-        frame.grid(row=4, column=0, sticky=EW, pady=5, padx=10)
-        frame.columnconfigure(0, weight=1)
+        # --- Sub-tab: Models (auto-download + cache) ---
+        models = tb.Frame(sub)
+        models.columnconfigure(0, weight=1)
+        models.rowconfigure(1, weight=1)
+        sub.add(models, text=_("settings.sub_models"))
 
-        self.reg_tree = ttk.Treeview(frame, columns=("name", "path", "status"),
-                                     show="headings", height=4, selectmode="browse")
-        self.reg_tree.heading("name", text=_("registry.col_name"))
-        self.reg_tree.heading("path", text=_("registry.col_path"))
-        self.reg_tree.heading("status", text=_("registry.col_status"))
-        self.reg_tree.column("name", width=120)
-        self.reg_tree.column("path", width=320)
-        self.reg_tree.column("status", width=60)
-        self.reg_tree.grid(row=0, column=0, sticky=EW, pady=(5, 5), padx=5)
+        mdl_frame = tb.LabelFrame(models, text=_("settings.models_frame"))
+        mdl_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
 
-        btn_row = tb.Frame(frame)
-        btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
-        tb.Button(btn_row, text=_("registry.refresh"), command=self._refresh_registry_tree,
-                  width=4).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text=_("registry.delete"), bootstyle="danger",
-                  command=self._delete_selected_registry, width=14).pack(side=LEFT, padx=(0, 3))
-        tb.Button(btn_row, text=_("registry.clean_dead"), command=self._clean_dead_registry,
-                  width=14).pack(side=LEFT)
-        self._refresh_registry_tree()
+        self.allow_dl_var = tk.BooleanVar(value=True)
+        tb.Checkbutton(mdl_frame, text=_("settings.models_auto"),
+                       variable=self.allow_dl_var).grid(row=0, column=0, sticky=W, pady=5, padx=5)
+        tb.Label(mdl_frame, text=_("settings.models_auto_hint"), foreground="gray", wraplength=600).grid(
+            row=1, column=0, sticky=W, padx=(15, 5), pady=(0, 5))
 
-        # --- Cache ---
-        frame = tb.LabelFrame(parent, text=_("cache.frame"))
-        frame.grid(row=5, column=0, sticky=EW, pady=5, padx=10)
-        frame.columnconfigure(0, weight=1)
+        cache_frame = tb.LabelFrame(models, text=_("cache.frame"))
+        cache_frame.grid(row=1, column=0, sticky=NSEW, pady=5, padx=10)
+        cache_frame.columnconfigure(0, weight=1)
+        cache_frame.rowconfigure(1, weight=1)
 
-        btn_row = tb.Frame(frame)
-        btn_row.grid(row=0, column=0, sticky=W, pady=(5, 0), padx=5)
-        tb.Button(btn_row, text=_("cache.refresh"), command=self._refresh_cache_list,
+        cache_btn_row = tb.Frame(cache_frame)
+        cache_btn_row.grid(row=0, column=0, sticky=W, pady=(5, 0), padx=5)
+        tb.Button(cache_btn_row, text=_("cache.refresh"), command=self._refresh_cache_list,
                   width=14).pack(side=LEFT, padx=(0, 5))
-        tb.Button(btn_row, text=_("cache.delete_selected"), bootstyle="danger",
+        tb.Button(cache_btn_row, text=_("cache.delete_selected"), bootstyle="danger",
                   command=self._delete_selected_cache).pack(side=LEFT)
 
-        columns = ("name", "type", "size", "date")
-        self.cache_tree = ttk.Treeview(frame, columns=columns, show="headings",
-                                       height=6, selectmode="extended")
+        cache_columns = ("name", "type", "size", "date")
+        self.cache_tree = ttk.Treeview(cache_frame, columns=cache_columns, show="headings",
+                                       selectmode="extended")
         self.cache_tree.heading("name", text=_("cache.col_name"))
         self.cache_tree.heading("type", text=_("cache.col_type"))
         self.cache_tree.heading("size", text=_("cache.col_size"))
@@ -389,14 +403,45 @@ class Audio2TextApp(tb.Window):
         self.cache_tree.column("type", width=80)
         self.cache_tree.column("size", width=90, anchor="e")
         self.cache_tree.column("date", width=90)
-        self.cache_tree.grid(row=1, column=0, sticky=EW, pady=5, padx=5)
+        self.cache_tree.grid(row=1, column=0, sticky=NSEW, pady=5, padx=5)
 
         self.cache_total_var = tk.StringVar(value="")
-        tb.Label(frame, textvariable=self.cache_total_var, foreground="gray").grid(
+        tb.Label(cache_frame, textvariable=self.cache_total_var, foreground="gray").grid(
             row=2, column=0, sticky=E, padx=10, pady=(0, 5))
+
+        # --- Sub-tab: Files (Registry) ---
+        files = tb.Frame(sub)
+        files.columnconfigure(0, weight=1)
+        files.rowconfigure(0, weight=1)
+        sub.add(files, text=_("settings.sub_files"))
+
+        reg_frame = tb.LabelFrame(files, text=_("registry.frame"))
+        reg_frame.grid(row=0, column=0, sticky=NSEW, pady=(10, 10), padx=10)
+        reg_frame.columnconfigure(0, weight=1)
+        reg_frame.rowconfigure(0, weight=1)
+
+        self.reg_tree = ttk.Treeview(reg_frame, columns=("name", "path", "status"),
+                                     show="headings", selectmode="browse")
+        self.reg_tree.heading("name", text=_("registry.col_name"))
+        self.reg_tree.heading("path", text=_("registry.col_path"))
+        self.reg_tree.heading("status", text=_("registry.col_status"))
+        self.reg_tree.column("name", width=120)
+        self.reg_tree.column("path", width=320)
+        self.reg_tree.column("status", width=60)
+        self.reg_tree.grid(row=0, column=0, sticky=NSEW, pady=(5, 5), padx=5)
+
+        reg_btn_row = tb.Frame(reg_frame)
+        reg_btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
+        tb.Button(reg_btn_row, text=_("registry.refresh"), command=self._refresh_registry_tree,
+                  width=4).pack(side=LEFT, padx=(0, 3))
+        tb.Button(reg_btn_row, text=_("registry.delete"), bootstyle="danger",
+                  command=self._delete_selected_registry, width=14).pack(side=LEFT, padx=(0, 3))
+        tb.Button(reg_btn_row, text=_("registry.clean_dead"), command=self._clean_dead_registry,
+                  width=14).pack(side=LEFT)
 
         self._cache_entries: list[dict] = []
         self._refresh_cache_list()
+        self._refresh_registry_tree()
         self._refresh_profile_list()
 
     def _apply_theme(self):
@@ -479,10 +524,10 @@ class Audio2TextApp(tb.Window):
             self._refresh_registry_tree()
 
     # ---------- profiles ----------
-    def _refresh_profile_list(self):
+    def _refresh_profile_list(self, mode: str = "file"):
         for item in self.profile_tree.get_children():
             self.profile_tree.delete(item)
-        for name, cfg in sorted(list_profiles(), key=lambda x: x[0]):
+        for name, cfg in sorted(list_profiles(mode=mode), key=lambda x: x[0]):
             model = cfg.get("model", "-")
             lang = cfg.get("language", "-")
             opts = []
@@ -500,22 +545,28 @@ class Audio2TextApp(tb.Window):
         self._refresh_transcribe_profiles()
 
     def _refresh_transcribe_profiles(self):
-        names = _profile_names()
+        names = _profile_names(mode="file")
         self.profile_cb.configure(values=names)
         if names and self.profile_var.get() not in names:
             self.profile_cb.current(0)
         self._update_profile_desc()
 
-    def _open_profile_dialog(self, title: str, initial: dict | None = None) -> dict | None:
+    def _open_profile_dialog(self, title: str, initial: dict | None = None, mode: str = "file") -> dict | None:
+        from config import language_list
+
         dialog = tb.Toplevel(self)
         dialog.title(title)
         dialog.transient(self)
         dialog.grab_set()
-        dialog.geometry("520x520")
-        dialog.minsize(480, 480)
+        dialog.geometry("540x560")
+        dialog.minsize(480, 520)
         dialog.columnconfigure(1, weight=1)
 
         result: dict = {}
+
+        lang_display_map = {}
+        for code in language_list:
+            lang_display_map[_(f"lang.{code}")] = code
 
         row = 0
         tb.Label(dialog, text=_("profiles.dialog_name")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=(10, 2))
@@ -523,11 +574,29 @@ class Audio2TextApp(tb.Window):
         tb.Entry(dialog, textvariable=name_var, width=40).grid(row=row, column=1, sticky=EW, padx=(0, 10), pady=(10, 2))
 
         row += 1
-        tb.Label(dialog, text=_("profiles.dialog_mode")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        mode_var = tk.StringVar(value=(initial or {}).get("mode", "file"))
-        mode_cb = tb.Combobox(dialog, textvariable=mode_var, values=["file", "realtime"],
-                              state="readonly", width=20)
-        mode_cb.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+        tb.Label(dialog, text=_("profiles.dialog_desc")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        desc_var = tk.StringVar(value=(initial or {}).get("description", ""))
+        tb.Entry(dialog, textvariable=desc_var, width=50).grid(row=row, column=1, sticky=EW, padx=(0, 10), pady=2)
+
+        row += 1
+        tb.Label(dialog, text=_("profiles.dialog_lang")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        lang_init_code = (initial or {}).get("language", "uk")
+        lang_init_display = next((d for d, c in lang_display_map.items() if c == lang_init_code),
+                                 _(f"lang.{lang_init_code}"))
+        lang_var = tk.StringVar(value=lang_init_display)
+        sorted_lang_displays = sorted(lang_display_map.keys())
+        tb.Combobox(dialog, textvariable=lang_var, values=sorted_lang_displays,
+                    state="readonly", width=22).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+
+        row += 1
+        filter_lbl = tb.Label(dialog, text=_("profiles.dialog_filter"))
+        filter_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        _ToolTip(filter_lbl, _("profiles.dialog_filter_tooltip"))
+        f_disp = _filter_display_map()
+        filter_init_raw = (initial or {}).get("clean_filter", "full")
+        filter_var = tk.StringVar(value=f_disp.get(filter_init_raw, filter_init_raw))
+        tb.Combobox(dialog, textvariable=filter_var, values=list(f_disp.values()),
+                    state="readonly", width=12).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
         tb.Label(dialog, text=_("profiles.dialog_model")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
@@ -543,7 +612,7 @@ class Audio2TextApp(tb.Window):
         model_status_var = tk.StringVar()
         model_status_lbl = tb.Label(model_frame, textvariable=model_status_var, font=("", 9, ""))
         model_status_lbl.pack(side=LEFT, padx=(8, 0))
-        def _update_model_status(*_):
+        def _update_model_status(*args):
             s = _model_cache_status(model_var.get())
             model_status_var.set(s)
             model_status_lbl.configure(foreground="orange" if s.startswith("⚡") else "green")
@@ -551,52 +620,54 @@ class Audio2TextApp(tb.Window):
         _update_model_status()
 
         row += 1
-        tb.Label(dialog, text=_("profiles.dialog_desc")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        desc_var = tk.StringVar(value=(initial or {}).get("description", ""))
-        tb.Entry(dialog, textvariable=desc_var, width=50).grid(row=row, column=1, sticky=EW, padx=(0, 10), pady=2)
-
-        row += 1
-        tb.Label(dialog, text=_("profiles.dialog_lang_code")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        lang_var = tk.StringVar(value=(initial or {}).get("language", "uk"))
-        tb.Entry(dialog, textvariable=lang_var, width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
-
-        row += 1
+        tb.Label(dialog, text=_("profiles.dialog_align")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         align_var = tk.BooleanVar(value=(initial or {}).get("align", False))
-        tb.Checkbutton(dialog, text=_("profiles.dialog_align"), variable=align_var).grid(
-            row=row, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=2)
+        tb.Checkbutton(dialog, variable=align_var).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
+        tb.Label(dialog, text=_("profiles.dialog_diarize")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         diarize_var = tk.BooleanVar(value=(initial or {}).get("diarize", False))
-        tb.Checkbutton(dialog, text=_("profiles.dialog_diarize"), variable=diarize_var).grid(
-            row=row, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=2)
+        tb.Checkbutton(dialog, variable=diarize_var).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+
+        row += 1
+        cpu_lbl = tb.Label(dialog, text=_("profiles.dialog_cpu"))
+        cpu_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        _ToolTip(cpu_lbl, _("profiles.dialog_cpu_tooltip"))
+        cpu_disp = _cpu_display_map()
+        cpu_init_raw = (initial or {}).get("cpu_profile", "high")
+        cpu_profile_var = tk.StringVar(value=cpu_disp.get(cpu_init_raw, cpu_init_raw))
+        cpu_cb = tb.Combobox(dialog, textvariable=cpu_profile_var, values=list(cpu_disp.values()),
+                             state="readonly", width=12)
+        cpu_cb.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+        cpu_rev = {v: k for k, v in _cpu_display_map().items()}
+        f_rev = {v: k for k, v in _filter_display_map().items()}
+
+        row += 1
+        tb.Label(dialog, text=_("profiles.dialog_workers")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
+        workers_frame = tb.Frame(dialog)
+        workers_frame.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+        workers_var = tk.IntVar(value=(initial or {}).get("max_workers", 2))
+        workers_spin = tb.Spinbox(workers_frame, from_=1, to=8, textvariable=workers_var, width=8)
+        workers_spin.pack(side=LEFT)
+        cpu_limit_label = tb.Label(workers_frame, text="", foreground="gray")
+        cpu_limit_label.pack(side=LEFT, padx=(8, 0))
+
+        def _update_workers_cap(*args):
+            ncpu = os.cpu_count() or 4
+            level = cpu_rev.get(cpu_profile_var.get(), "high")
+            max_w = {"low": 1, "medium": max(2, ncpu // 2), "high": ncpu}.get(level, ncpu)
+            workers_spin.configure(to=max_w)
+            if workers_var.get() > max_w:
+                workers_var.set(max_w)
+            cpu_limit_label.configure(text=_("profiles.dialog_workers_max", n=max_w))
+        cpu_profile_var.trace_add("write", _update_workers_cap)
+        _update_workers_cap()
 
         row += 1
         tb.Label(dialog, text=_("profiles.dialog_chunk")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
         chunk_var = tk.IntVar(value=(initial or {}).get("chunk_minutes", 0))
         tb.Spinbox(dialog, from_=0, to=60, textvariable=chunk_var, width=8).grid(
             row=row, column=1, sticky=W, padx=(0, 10), pady=2)
-
-        row += 1
-        tb.Label(dialog, text=_("profiles.dialog_workers")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        workers_var = tk.IntVar(value=(initial or {}).get("max_workers", 2))
-        tb.Spinbox(dialog, from_=1, to=8, textvariable=workers_var, width=8).grid(
-            row=row, column=1, sticky=W, padx=(0, 10), pady=2)
-
-        row += 1
-        filter_lbl = tb.Label(dialog, text=_("profiles.dialog_filter"))
-        filter_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        _ToolTip(filter_lbl, _("profiles.dialog_filter_tooltip"))
-        filter_var = tk.StringVar(value=(initial or {}).get("clean_filter", "full"))
-        tb.Combobox(dialog, textvariable=filter_var, values=["full", "light", "off"],
-                    state="readonly", width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
-
-        row += 1
-        cpu_lbl = tb.Label(dialog, text=_("profiles.dialog_cpu"))
-        cpu_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        _ToolTip(cpu_lbl, _("profiles.dialog_cpu_tooltip"))
-        cpu_profile_var = tk.StringVar(value=(initial or {}).get("cpu_profile", "high"))
-        tb.Combobox(dialog, textvariable=cpu_profile_var, values=list(cpu_levels),
-                    state="readonly", width=10).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         def on_save():
             name = name_var.get().strip()
@@ -605,14 +676,14 @@ class Audio2TextApp(tb.Window):
                 return
             cfg = {
                 "description": desc_var.get().strip(),
-                "language": lang_var.get().strip(),
+                "language": lang_display_map.get(lang_var.get(), "uk"),
                 "align": align_var.get(),
                 "diarize": diarize_var.get(),
                 "chunk_minutes": chunk_var.get(),
                 "max_workers": workers_var.get(),
-                "clean_filter": filter_var.get(),
-                "cpu_profile": cpu_profile_var.get(),
-                "mode": mode_var.get(),
+                "clean_filter": f_rev.get(filter_var.get(), "full"),
+                "cpu_profile": cpu_rev.get(cpu_profile_var.get(), "high"),
+                "mode": mode,
                 "model": model_var.get(),
             }
             upsert_profile(name, cfg)
@@ -632,7 +703,7 @@ class Audio2TextApp(tb.Window):
         return result if result.get("_saved") else None
 
     def _add_profile_dialog(self):
-        result = self._open_profile_dialog(_("profiles.dialog_add_title"))
+        result = self._open_profile_dialog(_("profiles.dialog_add_title"), mode="file")
         if result:
             self._refresh_profile_list()
 
@@ -646,7 +717,8 @@ class Audio2TextApp(tb.Window):
         if not cfg:
             return
         cfg["_name"] = name
-        result = self._open_profile_dialog(_("profiles.dialog_edit_title", name=name), initial=cfg)
+        profile_mode = cfg.get("mode", "file")
+        result = self._open_profile_dialog(_("profiles.dialog_edit_title", name=name), initial=cfg, mode=profile_mode)
         if result:
             self._refresh_profile_list()
 
@@ -672,7 +744,7 @@ class Audio2TextApp(tb.Window):
             self.token_status_var.set(lbl)
 
         if has_keyring():
-            self.token_mode_cb.set(MODES["keychain"])
+            self.token_mode_cb.set(_token_modes()["keychain"])
 
     def _save_token(self):
         token = self.token_var.get().strip()
@@ -708,13 +780,13 @@ class Audio2TextApp(tb.Window):
         if chunk:
             extras += _("profile.chunk_mark", n=chunk)
         cpu = cfg.get("cpu_profile", "high")
+        cpu_disp = _cpu_display_map()
         if cpu != "high":
-            extras += _("profile.cpu_mark", level=cpu)
+            extras += _("profile.cpu_mark", level=cpu_disp.get(cpu, cpu))
         if extras:
             parts.append(f"[{extras}]")
         self.profile_desc_var.set("  " + "  ".join(parts))
-        # sync cpu combobox with profile default
-        self.cpu_var.set(cpu)
+        self.cpu_var.set(cpu_disp.get(cpu, cpu))
 
     def _browse_file(self):
         path = filedialog.askopenfilename(
@@ -840,7 +912,7 @@ class Audio2TextApp(tb.Window):
                 max_workers=cfg.get("max_workers", 2),
                 allow_download=self.allow_dl_var.get(),
                 clean_filter=cfg.get("clean_filter", "full"),
-                cpu_profile=self.cpu_var.get(),
+                cpu_profile={v: k for k, v in _cpu_display_map().items()}.get(self.cpu_var.get(), "high"),
                 stop_event=stop_event,
             )
             transcriber.transcribe(file_path)

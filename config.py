@@ -18,7 +18,6 @@ language_list = [
     "uk",
     "en",
     "pl",
-    "ru",
     "de",
     "fr",
     "es",

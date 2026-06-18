@@ -35,6 +35,9 @@
   "profile.cpu_mark": " · ⚡{level}",
 
   "cpu.label": "CPU:",
+  "cpu.level_high": "Високе",
+  "cpu.level_medium": "Середнє",
+  "cpu.level_low": "Низьке",
   "cpu.tooltip": "Високе — всі ядра\nСереднє — половина ядер\nНизьке — 1 потік, низький пріоритет",
   "cpu.override_hint": "(перевизначає профіль)",
 
@@ -53,6 +56,11 @@
 
   "log.tab_title": "Лог",
 
+  "settings.sub_general": "Загальні",
+  "settings.sub_profiles": "Профілі",
+  "settings.sub_models": "Моделі",
+  "settings.sub_files": "Файли",
+
   "settings.theme_frame": "Тема оформлення",
   "settings.theme_apply": "Застосувати",
   "settings.models_frame": "Моделі",
@@ -61,6 +69,8 @@
   "settings.lang_frame": "Мова інтерфейсу",
   "settings.lang_label": "Мова:",
   "settings.lang_restart_hint": "Перезапустіть програму, щоб зміни набули чинності.",
+
+  "profiles.sub_file": "Файлові",
 
   "profiles.frame": "Профілі",
   "profiles.col_name": "Назва",
@@ -76,13 +86,28 @@
   "profiles.dialog_mode": "Режим:",
   "profiles.dialog_model": "Модель:",
   "profiles.dialog_desc": "Опис:",
-  "profiles.dialog_lang_code": "Мова (код):",
-  "profiles.dialog_align": "Вирівнювання (align)",
-  "profiles.dialog_diarize": "Діаризація (diarize)",
+  "profiles.dialog_lang": "Мова:",
+  "profiles.dialog_align": "Вирівнювання:",
+  "profiles.dialog_diarize": "Діаризація:",
   "profiles.dialog_chunk": "Чанки (хв, 0 = вимк.):",
   "profiles.dialog_workers": "Потоків (max_workers):",
+  "filter.value_full": "Повний",
+  "filter.value_light": "Легкий",
+  "filter.value_off": "Вимк.",
+
+  "token.mode_keychain": "системне сховище",
+  "token.mode_ask": "питати кожен запуск",
+
+  "size.bytes": "Б",
+  "size.kb": "КБ",
+  "size.mb": "МБ",
+  "size.gb": "ГБ",
+  "size.tb": "ТБ",
+
+  "profiles.dialog_workers_max": "(макс. {n})",
+
   "profiles.dialog_filter": "Фільтр аудіо:",
-  "profiles.dialog_filter_tooltip": "full — afftdn+loudnorm (якісно, ~12 хв)\nlight — highpass+lowpass (швидко, ~2 хв)\noff — без обробки",
+  "profiles.dialog_filter_tooltip": "Повний — afftdn+loudnorm (якісно, ~12 хв)\nЛегкий — highpass+lowpass (швидко, ~2 хв)\nВимк. — без обробки",
   "profiles.dialog_cpu": "Навантаження CPU:",
   "profiles.dialog_cpu_tooltip": "Високе — всі ядра (default)\nСереднє — половина ядер, nice=10\nНизьке — 1 потік, nice=19",
   "profiles.dialog_err_name_required": "Назва профілю обов'язкова.",
@@ -123,5 +148,20 @@
   "cache.confirm_delete": "Видалити {n} моделей?\n\n{details}",
   "cache.err_delete": "Не вдалося видалити {name}:\n{err}",
 
-  "ffmpeg.err_not_found": "ffmpeg не знайдено.\nВстановіть ffmpeg для коректної роботи."
+  "ffmpeg.err_not_found": "ffmpeg не знайдено.\nВстановіть ffmpeg для коректної роботи.",
+
+  "lang.uk": "Українська",
+  "lang.en": "Англійська",
+  "lang.pl": "Польська",
+  "lang.de": "Німецька",
+  "lang.fr": "Французька",
+  "lang.es": "Іспанська",
+  "lang.it": "Італійська",
+  "lang.pt": "Португальська",
+  "lang.nl": "Нідерландська",
+  "lang.ja": "Японська",
+  "lang.zh": "Китайська",
+  "lang.ko": "Корейська",
+  "lang.ar": "Арабська",
+  "lang.tr": "Турецька"
 }

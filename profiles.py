@@ -108,6 +108,23 @@ EMBEDDED_PROFILES = {
                 "max_workers": 2,
                 "cpu_profile": "medium",
             },
+            "full_uk_noalign": {
+                "description": "Повна транскрипція (large-v3) + діаризація, без вирівнювання",
+                "language": "uk",
+                
+                "align": False,
+                "diarize": True,
+            },
+            "full_uk_chunked_noalign": {
+                "description": "Повна (large-v3) + діаризація, без вирівнювання, з розбиттям",
+                "language": "uk",
+                
+                "align": False,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+                "cpu_profile": "medium",
+            },
             "full_en": {
                 "description": "Full transcription (large-v3) + diarization",
                 "language": "en",
@@ -115,18 +132,28 @@ EMBEDDED_PROFILES = {
                 "align": True,
                 "diarize": True,
             },
+            "full_en_chunked": {
+                "description": "Full (large-v3) + diarization, chunked",
+                "language": "en",
+                
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+                "cpu_profile": "medium",
+            },
         },
         "distil-large-v2": {
-            "distil_v2_uk": {
-                "description": "Швидка транскрипція (distil-large-v2) + діаризація",
-                "language": "uk",
+            "distil_v2_en": {
+                "description": "Fast transcription (distil-large-v2, ENGLISH ONLY) + diarization",
+                "language": "en",
                 
                 "align": True,
                 "diarize": True,
             },
-            "distil_v2_uk_chunked": {
-                "description": "Швидка (distil-large-v2) + діаризація, з розбиттям на частини",
-                "language": "uk",
+            "distil_v2_en_chunked": {
+                "description": "Fast (distil-large-v2, ENGLISH ONLY) + diarization, chunked",
+                "language": "en",
                 
                 "align": True,
                 "diarize": True,
@@ -136,16 +163,16 @@ EMBEDDED_PROFILES = {
             },
         },
         "distil-large-v3": {
-            "distil_v3_uk": {
-                "description": "Швидка транскрипція (distil-large-v3) + діаризація",
-                "language": "uk",
+            "distil_v3_en": {
+                "description": "Fast transcription (distil-large-v3, ENGLISH ONLY) + diarization",
+                "language": "en",
                 
                 "align": True,
                 "diarize": True,
             },
-            "distil_v3_uk_chunked": {
-                "description": "Швидка (distil-large-v3) + діаризація, з розбиттям на частини",
-                "language": "uk",
+            "distil_v3_en_chunked": {
+                "description": "Fast (distil-large-v3, ENGLISH ONLY) + diarization, chunked",
+                "language": "en",
                 
                 "align": True,
                 "diarize": True,
@@ -155,16 +182,16 @@ EMBEDDED_PROFILES = {
             },
         },
         "distil-large-v3.5": {
-            "distil_v35_uk": {
-                "description": "Швидка транскрипція (distil-large-v3.5) + діаризація",
-                "language": "uk",
+            "distil_v35_en": {
+                "description": "Fast transcription (distil-large-v3.5, ENGLISH ONLY) + diarization",
+                "language": "en",
                 
                 "align": True,
                 "diarize": True,
             },
-            "distil_v35_uk_chunked": {
-                "description": "Швидка (distil-large-v3.5) + діаризація, з розбиттям на частини",
-                "language": "uk",
+            "distil_v35_en_chunked": {
+                "description": "Fast (distil-large-v3.5, ENGLISH ONLY) + diarization, chunked",
+                "language": "en",
                 
                 "align": True,
                 "diarize": True,
@@ -191,12 +218,39 @@ EMBEDDED_PROFILES = {
                 "max_workers": 2,
                 "cpu_profile": "medium",
             },
+            "turbo_uk_noalign": {
+                "description": "Дуже швидка (large-v3-turbo) + діаризація, без вирівнювання",
+                "language": "uk",
+                
+                "align": False,
+                "diarize": True,
+            },
+            "turbo_uk_chunked_noalign": {
+                "description": "Дуже швидка (large-v3-turbo) + діаризація, без вирівнювання, з розбиттям",
+                "language": "uk",
+                
+                "align": False,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+                "cpu_profile": "medium",
+            },
             "turbo_en": {
                 "description": "Fast full transcription (large-v3-turbo) + diarization",
                 "language": "en",
                 
                 "align": True,
                 "diarize": True,
+            },
+            "turbo_en_chunked": {
+                "description": "Fast (large-v3-turbo) + diarization, chunked",
+                "language": "en",
+                
+                "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+                "cpu_profile": "medium",
             },
         },
         "turbo": {
@@ -212,6 +266,23 @@ EMBEDDED_PROFILES = {
                 "language": "uk",
                 
                 "align": True,
+                "diarize": True,
+                "chunk_minutes": 10,
+                "max_workers": 2,
+                "cpu_profile": "medium",
+            },
+            "turbo_alt_uk_noalign": {
+                "description": "Дуже швидка (turbo) + діаризація, без вирівнювання",
+                "language": "uk",
+                
+                "align": False,
+                "diarize": True,
+            },
+            "turbo_alt_uk_chunked_noalign": {
+                "description": "Дуже швидка (turbo) + діаризація, без вирівнювання, з розбиттям",
+                "language": "uk",
+                
+                "align": False,
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,

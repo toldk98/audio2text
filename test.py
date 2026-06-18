@@ -394,7 +394,9 @@ def test_size_helpers():
     _section("_format_size / _dir_size")
 
     from gui.app import _format_size, _dir_size
+    from gui.lang import _inst
 
+    _inst.switch_to("uk")
     _check(_format_size(0) == "0.0 Б", "0 bytes")
     _check(_format_size(1023) == "1023.0 Б", "1023 bytes → Б")
     _check(_format_size(1024) == "1.0 КБ", "1024 bytes → 1.0 КБ")
