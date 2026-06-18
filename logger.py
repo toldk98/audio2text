@@ -11,6 +11,10 @@ _LOG_CONFIGURED = False
 
 
 class _StdoutHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.terminator = "\n"
+
     def emit(self, record):
         msg = self.format(record)
         try:
