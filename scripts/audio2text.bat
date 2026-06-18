@@ -11,7 +11,7 @@ if not exist "%DIR%main.py" (
     exit /b 1
 )
 
-if not exist "%ENV_DIR%\Scripts\python.exe" (
+if not exist "%ENV_DIR%\python.exe" (
     if exist "%ENV_DIR%" (
         attrib -R "%ENV_DIR%" /s /d 2>nul
         rmdir /s /q "%ENV_DIR%" 2>nul
@@ -33,7 +33,7 @@ if not exist "%ENV_DIR%\Scripts\python.exe" (
     cd /d "%DIR%"
 )
 
-if not exist "%ENV_DIR%\Scripts\python.exe" (
+if not exist "%ENV_DIR%\python.exe" (
     echo [POMYLKA] Seredovyshche ne povne.
     pause
     exit /b 1
