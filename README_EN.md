@@ -134,11 +134,16 @@ The result is saved in `~/.cache/audio2text/` as a text file (`.txt`) with recog
 
 ### CLI
 
+CLI uses the same token mechanism as GUI: `HF_TOKEN` env var first, then system keychain.
+
 ```bash
 # Transcribe a file
 python main.py file path/to/audio.m4a
 
-# With profile and model selection
+# With a profile
+python main.py file audio.m4a --profile full_uk
+
+# With model and language selection
 python main.py file audio.m4a --model_name large-v3 --language uk
 
 # Split into chunks for parallel processing
@@ -147,8 +152,21 @@ python main.py file audio.m4a --chunk_minutes 10 --max_workers 4
 # Skip download confirmation prompt
 python main.py file audio.m4a -y
 
+# With progress bar
+python main.py file audio.m4a --progress
+
+# Toggle alignment and diarization
+python main.py file audio.m4a --no-align --diarize
+
+# Audio filter and CPU load
+python main.py file audio.m4a --clean_filter light --cpu_profile low
+
 # Interactive picker
 python main.py pick
+
+# Cache management
+python main.py --list-models
+python main.py --delete-model large-v3
 ```
 
 ### Profiles
@@ -157,6 +175,8 @@ Profiles are stored in `~/.config/audio2text/profiles.yaml`.
 Built-in profiles are copied there on first run.
 
 Profiles can be created and edited via GUI (Settings → Profiles → Add/Edit buttons).
+In CLI, use `--profile <name>` to apply a profile — it fills all parameters, and explicit
+CLI flags override them.
 
 Example profile:
 

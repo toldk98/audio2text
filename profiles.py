@@ -316,8 +316,11 @@ EMBEDDED_PROFILES = {
 def _try_load_yaml(path: str) -> dict | None:
     if yaml is None or not os.path.exists(path):
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return None
     return data if isinstance(data, dict) else None
 
 
@@ -325,13 +328,16 @@ def _ensure_user_profiles():
     if os.path.exists(USER_PROFILES_PATH):
         return
     os.makedirs(os.path.dirname(USER_PROFILES_PATH), exist_ok=True)
-    if yaml is not None:
-        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
-            yaml.dump(EMBEDDED_PROFILES, f, allow_unicode=True, default_flow_style=False)
-    else:
-        import json
-        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
-            json.dump(EMBEDDED_PROFILES, f, ensure_ascii=False, indent=2)
+    try:
+        if yaml is not None:
+            with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+                yaml.dump(EMBEDDED_PROFILES, f, allow_unicode=True, default_flow_style=False)
+        else:
+            import json
+            with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+                json.dump(EMBEDDED_PROFILES, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
 
 
 def load_profiles() -> dict:
@@ -393,13 +399,16 @@ def _get_profile_container(name: str) -> tuple[dict, str, str] | None:
 
 def save_profiles(data: dict):
     _ensure_user_profiles()
-    if yaml is not None:
-        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
-            yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
-    else:
-        import json
-        with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        if yaml is not None:
+            with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+                yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+        else:
+            import json
+            with open(USER_PROFILES_PATH, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
 
 
 def upsert_profile(name: str, cfg: dict):

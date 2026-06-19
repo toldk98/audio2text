@@ -54,9 +54,14 @@ def _check_resources(model_size: str, do_align: bool, do_diarize: bool) -> tuple
 
     # 2. Disk for model download (error — blocks if not cached AND full)
     if not _model_cached(model_size):
-        cache_dir = os.path.expanduser("~/.cache")
-        if not os.path.exists(cache_dir):
-            cache_dir = os.path.expanduser("~")
+        candidates = [
+            os.path.expanduser("~/.cache/huggingface/hub"),
+            os.path.expanduser("~/.cache/whisper"),
+            os.path.expanduser("~/.cache"),
+            os.path.expanduser("~"),
+        ]
+        cache_dir = next((d for d in candidates if os.path.exists(d)),
+                         os.path.expanduser("~"))
         free_disk_mb = psutil.disk_usage(cache_dir).free / 1024 / 1024
         need_disk_mb = need_mb * 3
         if free_disk_mb < need_disk_mb:
@@ -146,9 +151,14 @@ def _model_cached(model_size: str) -> bool:
         return True
 
     hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
-    for prefix in ("models--Systran--faster-whisper-", "models--Systran--faster-distil-whisper-"):
-        model_dir = os.path.join(hf_dir, f"{prefix}{model_size}")
-        if os.path.isdir(model_dir):
+    # Non-distil models: faster-whisper-{model_size}
+    nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
+    if os.path.isdir(nd):
+        return True
+    # Distil models: faster-distil-whisper-{model_size} (strip distil- prefix)
+    if model_size.startswith("distil-"):
+        d = os.path.join(hf_dir, f"models--Systran--faster-distil-whisper-{model_size[7:]}")
+        if os.path.isdir(d):
             return True
 
     return False
@@ -195,6 +205,7 @@ class WhisperTranscriber:
             clean_filter: str = "full",
             cpu_profile: str = "high",
             stop_event: threading.Event | None = None,
+            progress_callback=None,
     ):
         self.hf_token = hf_token
         self.model_size = model_size
@@ -207,6 +218,7 @@ class WhisperTranscriber:
         self.clean_filter = clean_filter
         self.cpu_profile = cpu_profile
         self.stop_event = stop_event or threading.Event()
+        self.progress_callback = progress_callback
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.compute_type = "float16" if self.device == "cuda" else "int8"
@@ -389,6 +401,8 @@ class WhisperTranscriber:
                         avg = sum(chunk_times) / len(chunk_times)
                         remaining = avg * (len(new_chunks) - completed)
                         logger.info(f"[ETA] Чанк {completed}/{len(new_chunks)} · залишилось ~{remaining:.0f} с")
+                        if self.progress_callback:
+                            self.progress_callback(completed, len(new_chunks), remaining)
 
             if chunk_times:
                 avg_chunk = sum(chunk_times) / len(chunk_times)

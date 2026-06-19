@@ -13,3 +13,5 @@ venv/
 Audio/
 other/*.txt
 other/*.m4a
+.opencode/
+gui/.uilang

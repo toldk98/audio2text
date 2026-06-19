@@ -131,11 +131,17 @@ python main.py
 Результат зберігається у `~/.cache/audio2text/` у вигляді текстового файлу (`.txt`) з розпізнаним текстом, таймкодами та позначками спікерів (якщо діаризація увімкнена).
 
 ### CLI
+
+CLI використовує той самий механізм токена, що й GUI: спочатку `HF_TOKEN` з оточення, потім system keychain.
+
 ```bash
 # Транскрибувати файл
 python main.py file шлях/до/аудіо.m4a
 
-# З вибором профілю та моделі
+# З профілем
+python main.py file audio.m4a --profile full_uk
+
+# З вибором моделі та мови
 python main.py file audio.m4a --model_name large-v3 --language uk
 
 # Розбити на частини для паралельної обробки
@@ -144,8 +150,21 @@ python main.py file audio.m4a --chunk_minutes 10 --max_workers 4
 # Без запиту підтвердження завантаження моделей
 python main.py file audio.m4a -y
 
+# З прогрес-баром
+python main.py file audio.m4a --progress
+
+# Керування вирівнюванням та діаризацією
+python main.py file audio.m4a --no-align --diarize
+
+# Фільтр аудіо та навантаження CPU
+python main.py file audio.m4a --clean_filter light --cpu_profile low
+
 # Інтерактивний вибір
 python main.py pick
+
+# Керування кешем моделей
+python main.py --list-models
+python main.py --delete-model large-v3
 ```
 
 ### Профілі
@@ -154,6 +173,8 @@ python main.py pick
 Вбудовані профілі копіюються туди при першому запуску.
 
 Профілі можна створювати та редагувати через GUI (Налаштування → Профілі → кнопка Додати/Редагувати).
+У CLI профіль застосовується через `--profile <ім'я>` — він заповнює всі параметри, а явні флаги CLI
+їх перевизначають.
 
 Приклад профілю:
 

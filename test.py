@@ -123,14 +123,349 @@ def test_profiles():
 def test_model_cache_status():
     _section("Model cache status")
 
+    _mock_gui_imports()
     from gui.app import _model_cache_status, _MODEL_SIZES
 
-    for model, expected_size in _MODEL_SIZES.items():
-        status = _model_cache_status(model)
-        _check(isinstance(status, str) and len(status) > 0, f"status for {model}: {status}")
+    _check(len(_MODEL_SIZES) >= 10, "_MODEL_SIZES has >= 10 entries")
 
-    uncached = _model_cache_status("nonexistent_model_xyz")
-    _check(uncached.startswith("⚡"), "unknown model shows ⚡")
+    # uncached model = ⚡ prefix
+    with mock.patch("os.path.isfile", return_value=False), \
+         mock.patch("os.path.isdir", return_value=False):
+        for model in list(_MODEL_SIZES)[:3]:
+            status = _model_cache_status(model)
+            _check(status.startswith("⚡"), f"uncached {model} starts with ⚡ ({status})")
+
+    # cached model (whisper .pt) = size without ⚡
+    with mock.patch("os.path.isfile", return_value=True), \
+         mock.patch("os.path.getsize", return_value=1024**3):
+        status = _model_cache_status("tiny")
+        _check(not status.startswith("⚡"), "cached tiny no ⚡ prefix")
+        _check("ГБ" in status or "МБ" in status, "cached model shows size")
+
+    # distil model cached via huggingface hub
+    with mock.patch("os.path.isfile", side_effect=lambda p: p.endswith("tiny.pt")), \
+         mock.patch("os.path.isdir", return_value=True), \
+         mock.patch("os.path.getsize", return_value=500*1024**2), \
+         mock.patch("gui.app._dir_size", return_value=500*1024**2):
+        status = _model_cache_status("distil-large-v2")
+        _check(not status.startswith("⚡"), "cached distil no ⚡ prefix")
+
+    # unknown model always shows ⚡
+    with mock.patch("os.path.isfile", return_value=False), \
+         mock.patch("os.path.isdir", return_value=False):
+        status = _model_cache_status("nonexistent_model")
+        _check(status.startswith("⚡"), "unknown model shows ⚡")
+
+# ---------------------------------------------------------------------------
+# token_manager
+# ---------------------------------------------------------------------------
+def test_token_manager():
+    _section("token_manager")
+
+    import gui.token_manager as tm
+
+    mock_keyring = mock.MagicMock()
+    mock_keyring.get_password.return_value = "k_token"
+    mock_keyring.get_keyring.return_value = mock.MagicMock()
+
+    # load_token with env var
+    with mock.patch.dict(os.environ, {"HF_TOKEN": "test_token_123"}, clear=True):
+        token, source = tm.load_token()
+        _check(token == "test_token_123", "load_token reads HF_TOKEN env")
+        _check(source == "env", "load_token source=env")
+
+    # load_token with keyring
+    with mock.patch.dict(os.environ, {}, clear=True), \
+         mock.patch.dict(sys.modules, {"keyring": mock_keyring}):
+        token, source = tm.load_token()
+        _check(token == "k_token", "load_token reads from keyring")
+        _check(source == "keychain", "load_token source=keychain")
+
+    # load_token no token
+    mock_kr_no = mock.MagicMock()
+    mock_kr_no.get_password.return_value = None
+    with mock.patch.dict(os.environ, {}, clear=True), \
+         mock.patch.dict(sys.modules, {"keyring": mock_kr_no}):
+        token, source = tm.load_token()
+        _check(token is None, "load_token no token → None")
+        _check(source is None, "load_token no source → None")
+
+    # has_keyring True
+    with mock.patch.dict(sys.modules, {"keyring": mock_keyring}):
+        _check(tm.has_keyring(), "has_keyring returns True")
+
+    # has_keyring False (import fails)
+    mock_kr_bad = mock.MagicMock()
+    mock_kr_bad.get_keyring.side_effect = Exception
+    with mock.patch.dict(sys.modules, {"keyring": mock_kr_bad}):
+        _check(not tm.has_keyring(), "has_keyring returns False on exception")
+
+    # save_token to keychain
+    mock_kr_save = mock.MagicMock()
+    with mock.patch.dict(sys.modules, {"keyring": mock_kr_save}):
+        tm.save_token("saved_token", "keychain")
+        mock_kr_save.set_password.assert_called_once_with("audio2text", "hf_token", "saved_token")
+        _check(True, "save_token calls keyring.set_password")
+
+    # save_token mode=ask does nothing
+    mock_kr_ask = mock.MagicMock()
+    with mock.patch.dict(sys.modules, {"keyring": mock_kr_ask}):
+        tm.save_token("tok", "ask")
+        mock_kr_ask.set_password.assert_not_called()
+        _check(True, "save_token mode=ask no keyring call")
+
+    # load_settings missing file
+    orig = tm.SETTINGS_PATH
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        p = f.name
+    os.remove(p)
+    try:
+        tm.SETTINGS_PATH = p
+        _check(tm.load_settings() == {}, "load_settings missing → {}")
+    finally:
+        tm.SETTINGS_PATH = orig
+        os.remove(p) if os.path.exists(p) else None
+
+    # load_settings valid file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump({"theme": "darkly"}, f)
+        p = f.name
+    try:
+        tm.SETTINGS_PATH = p
+        s = tm.load_settings()
+        _check(s.get("theme") == "darkly", "load_settings valid JSON")
+    finally:
+        tm.SETTINGS_PATH = orig
+
+    # load_settings corrupted file
+    Path(p).write_text("{corrupted")
+    tm.SETTINGS_PATH = p
+    try:
+        _check(tm.load_settings() == {}, "load_settings corrupted → {}")
+    finally:
+        tm.SETTINGS_PATH = orig
+        os.remove(p)
+
+    # save_settings creates file and merges
+    with tempfile.TemporaryDirectory() as tmp:
+        p2 = os.path.join(tmp, "settings.json")
+        tm.SETTINGS_PATH = p2
+        tm.save_settings({"theme": "solar"})
+        _check(os.path.exists(p2), "save_settings creates file")
+        data = json.loads(Path(p2).read_text())
+        _check(data.get("theme") == "solar", "save_settings writes data")
+
+        tm.save_settings({"language": "uk"})
+        data = json.loads(Path(p2).read_text())
+        _check(data.get("theme") == "solar", "save_settings merge keeps old key")
+        _check(data.get("language") == "uk", "save_settings merge adds new key")
+    tm.SETTINGS_PATH = orig
+
+
+# ---------------------------------------------------------------------------
+# CLI parser
+# ---------------------------------------------------------------------------
+def _mock_cli_imports():
+    _mock_heavy_imports()
+    for mod_n in ("numpy", "sounddevice", "dotenv", "dotenv.main",
+                   "whisperx", "whisperx.diarize", "torch"):
+        if mod_n not in sys.modules:
+            sys.modules[mod_n] = mock.MagicMock()
+
+
+def test_cli_parser():
+    _section("CLI parser")
+
+    _mock_cli_imports()
+    from cli import build_parser, _fill_defaults
+
+    parser = build_parser()
+
+    args, _ = parser.parse_known_args(["file", "test.m4a"])
+    _check(args.mode == "file", "mode=file")
+    _check(args.model_name is None, "default model_name=None")
+    _check(args.language is None, "default language=None")
+    _check(args.chunk_minutes is None, "default chunk=None")
+    _check(args.max_workers is None, "default workers=None")
+    _check(args.yes is False, "default yes=False")
+
+    args2, _ = parser.parse_known_args(["file", "test.m4a",
+                                          "--model_name", "tiny",
+                                          "--language", "en",
+                                          "--chunk_minutes", "10",
+                                          "--max_workers", "4",
+                                          "-y"])
+    _check(args2.model_name == "tiny", "custom model=tiny")
+    _check(args2.language == "en", "custom language=en")
+    _check(args2.chunk_minutes == 10, "custom chunk=10")
+    _check(args2.max_workers == 4, "custom workers=4")
+    _check(args2.yes is True, "custom yes=True")
+
+    args3, _ = parser.parse_known_args(["realtime", "--device", "0"])
+    _check(args3.mode == "realtime", "mode=realtime")
+    _check(args3.device == "0", "device=0")
+
+    args4, _ = parser.parse_known_args(["pick"])
+    _check(args4.mode == "pick", "mode=pick")
+
+    # new flags: align, diarize, clean_filter, cpu_profile
+    args5, _ = parser.parse_known_args(["file", "test.m4a",
+                                          "--no-align", "--no-diarize",
+                                          "--clean_filter", "light",
+                                          "--cpu_profile", "low"])
+    _check(args5.align is False, "--no-align=False")
+    _check(args5.diarize is False, "--no-diarize=False")
+    _check(args5.clean_filter == "light", "clean_filter=light")
+    _check(args5.cpu_profile == "low", "cpu_profile=low")
+
+    # _fill_defaults fills None with actual defaults
+    args6, _ = parser.parse_known_args(["file", "test.m4a"])
+    args6 = _fill_defaults(args6)
+    _check(args6.model_name == "large-v3", "_fill_defaults model=large-v3")
+    _check(args6.language == "uk", "_fill_defaults lang=uk")
+    _check(args6.align is True, "_fill_defaults align=True")
+    _check(args6.diarize is True, "_fill_defaults diarize=True")
+    _check(args6.clean_filter == "full", "_fill_defaults filter=full")
+    _check(args6.cpu_profile == "high", "_fill_defaults cpu=high")
+    _check(args6.chunk_minutes == 0, "_fill_defaults chunk=0")
+    _check(args6.max_workers == 2, "_fill_defaults workers=2")
+
+    # --list-models and --delete-model flags
+    args7, _ = parser.parse_known_args(["--list-models"])
+    _check(args7.list_models is True, "--list-models flag")
+
+    args8, _ = parser.parse_known_args(["--delete-model", "tiny"])
+    _check(args8.delete_model == "tiny", "--delete-model value")
+
+    # --profile flag
+    args9, _ = parser.parse_known_args(["--profile", "full_uk", "file", "test.m4a"])
+    _check(args9.profile == "full_uk", "--profile value")
+
+    # --progress flag
+    args10, _ = parser.parse_known_args(["file", "test.m4a", "--progress"])
+    _check(args10.progress is True, "--progress flag")
+
+    _check(parser.parse_known_args(["file", "track.m4a", "--extra"])[1] == ["track.m4a", "--extra"],
+           "parse_known_args passes extra args")
+
+
+# ---------------------------------------------------------------------------
+# pick.py utils
+# ---------------------------------------------------------------------------
+def test_pick_utils():
+    _section("pick.py utils")
+
+    _mock_cli_imports()
+    from pick import _get_category, _scan_audio_dir, _check_fzf
+
+    _check(_get_category({"model": "tiny", "mode": "file"}) == "⚡ Швидко",
+           "tiny → Швидко")
+    _check(_get_category({"model": "base", "mode": "file"}) == "⚡ Швидко",
+           "base → Швидко")
+    _check(_get_category({"model": "distil-large-v2", "mode": "file"}) == "⚡⚡ Швидко + якісно",
+           "distil-v2 → Швидко + якісно")
+    _check(_get_category({"model": "large-v3", "mode": "file"}) == "🐢 Максимальна якість",
+           "large-v3 → Максимальна якість")
+    _check(_get_category({"model": "unknown", "mode": "file"}) == "📦 Інше",
+           "unknown → Інше")
+    _check(_get_category({"model": "tiny", "mode": "realtime"}) == "🎤 Реальний час",
+           "realtime → Реальний час")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        Path(tmp, "a.wav").touch()
+        Path(tmp, "b.m4a").touch()
+        Path(tmp, "c.mp3").touch()
+        Path(tmp, "d.ogg").touch()
+        Path(tmp, "e.txt").touch()
+        files = _scan_audio_dir(tmp)
+        _check(len(files) == 4, "_scan_audio_dir finds 4 of 5 files")
+        _check(all(f.endswith((".wav", ".m4a", ".mp3", ".ogg")) for f in files),
+               "only audio extensions")
+
+    _check(_scan_audio_dir("/nonexistent") == [],
+           "_scan_audio_dir nonexistent → []")
+    _check(isinstance(_check_fzf(), bool), "_check_fzf returns bool")
+
+
+# ---------------------------------------------------------------------------
+# GUI utils (requires _mock_gui_imports)
+# ---------------------------------------------------------------------------
+def test_gui_utils():
+    _section("GUI utils")
+
+    _mock_gui_imports()
+    import gui.app
+
+    _check(len(gui.app._MODEL_SIZES) > 10, "_MODEL_SIZES populated")
+
+    _check("high" in gui.app._cpu_display_map(), "_cpu_display_map has high")
+    _check("full" in gui.app._filter_display_map(), "_filter_display_map has full")
+
+    # _profile_names uses real list_profiles — should work without GUI
+    names = gui.app._profile_names()
+    _check(len(names) > 0, "_profile_names returns profiles")
+    _check(all(isinstance(n, str) for n in names), "_profile_names returns strings")
+
+    # _scan_model_cache with no cache dirs → empty
+    with mock.patch("os.path.isdir", return_value=False):
+        entries = gui.app._scan_model_cache()
+        _check(entries == [], "_scan_model_cache no dirs → []")
+
+    # _scan_model_cache with mock whisper dir
+    def isdir_side_effect(path):
+        return "whisper" in path or "huggingface" in path
+    with mock.patch("os.path.isdir", side_effect=isdir_side_effect), \
+         mock.patch("os.listdir", return_value=["tiny.pt", "base.pt"]), \
+         mock.patch("os.path.isfile", return_value=True), \
+         mock.patch("os.path.getsize", return_value=150*1024**2), \
+         mock.patch("os.path.getmtime", return_value=1234567890):
+
+        entries = gui.app._scan_model_cache()
+        _check(len(entries) >= 2, "_scan_model_cache finds mock entries")
+
+
+# ---------------------------------------------------------------------------
+# CLI utils (cache listing, deletion, format)
+# ---------------------------------------------------------------------------
+def test_cli_utils():
+    _section("CLI utils")
+
+    _mock_cli_imports()
+    from cli import _list_cached_models, _delete_model, _format_size
+
+    _check(_format_size(0) == "0.0 Б", "cli _format_size 0")
+    _check(_format_size(1024) == "1.0 КБ", "cli _format_size 1 KB")
+    _check(_format_size(1024**2) == "1.0 МБ", "cli _format_size 1 MB")
+    _check(_format_size(1024**3) == "1.0 ГБ", "cli _format_size 1 GB")
+
+    # _list_cached_models with no cache dirs
+    with mock.patch("os.path.isdir", return_value=False):
+        entries = _list_cached_models()
+        _check(entries == [], "list_cached_models no dirs → []")
+
+    # _list_cached_models with mock whisper cache
+    def isdir_side(p):
+        return "whisper" in p or "huggingface" in p
+    with mock.patch("os.path.isdir", side_effect=isdir_side), \
+         mock.patch("os.listdir", return_value=["tiny.pt", "base.pt"]), \
+         mock.patch("os.path.isfile", return_value=True), \
+         mock.patch("os.path.getsize", return_value=150*1024**2):
+        entries = _list_cached_models()
+        _check(len(entries) == 2, "list_cached_models finds 2 whisper models")
+        _check(entries[0]["name"] == "tiny", "first entry name=tiny")
+        _check(entries[0]["type"] == "Whisper", "type=Whisper")
+
+    # _delete_model nonexistent
+    with mock.patch("os.path.isfile", return_value=False), \
+         mock.patch("os.path.isdir", return_value=False):
+        _check(not _delete_model("nonexistent"), "delete nonexistent → False")
+
+    # _delete_model existing whisper .pt
+    with mock.patch("os.path.isfile", return_value=True), \
+         mock.patch("os.remove"), \
+         mock.patch("os.path.isdir", return_value=False):
+        _check(_delete_model("tiny"), "delete existing → True")
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -168,6 +503,31 @@ def _mock_heavy_imports():
     sys.modules["whisperx"] = mock_whisperx
     sys.modules["torch"] = mock_torch
     sys.modules["whisperx.diarize"] = mock_diarize
+
+
+def _mock_gui_imports():
+    """Mock tkinter/ttkbootstrap to allow importing gui.app without a display."""
+    for mod in list(sys.modules):
+        if mod.startswith(("tkinter", "ttkbootstrap")):
+            del sys.modules[mod]
+
+    mock_tk = mock.MagicMock()
+    mock_tk.Tk = mock.MagicMock()
+    mock_tk.Toplevel = mock.MagicMock()
+    mock_fd = mock.MagicMock()
+    mock_mb = mock.MagicMock()
+    mock_ttk = mock.MagicMock()
+    mock_tb = mock.MagicMock()
+    mock_tb.Window = mock.MagicMock()
+    mock_tb.Label = mock.MagicMock()
+    mock_const = mock.MagicMock()
+
+    sys.modules["tkinter"] = mock_tk
+    sys.modules["tkinter.filedialog"] = mock_fd
+    sys.modules["tkinter.messagebox"] = mock_mb
+    sys.modules["tkinter.ttk"] = mock_ttk
+    sys.modules["ttkbootstrap"] = mock_tb
+    sys.modules["ttkbootstrap.constants"] = mock_const
 
 
 # ---------------------------------------------------------------------------
@@ -662,6 +1022,11 @@ if __name__ == "__main__":
     test_registry()
     test_profiles()
     test_model_cache_status()
+    test_token_manager()
+    test_cli_parser()
+    test_cli_utils()
+    test_pick_utils()
+    test_gui_utils()
     test_config()
     test_model_cached_core()
     test_segments_to_text()

@@ -3,8 +3,6 @@
 
   "common.error": "Помилка",
   "common.confirm": "Підтвердження",
-  "common.info": "Інформація",
-  "common.warning": "Увага",
 
   "tab.transcribe": "Транскрипція",
   "tab.log": "Лог",
@@ -54,8 +52,6 @@
   "run.log_error": "❌ Помилка: {e}\n",
   "run.confirm_exit": "Транскрипція ще виконується.\nСкасувати та вийти?",
 
-  "log.tab_title": "Лог",
-
   "settings.sub_general": "Загальні",
   "settings.sub_profiles": "Профілі",
   "settings.sub_models": "Моделі",
@@ -83,7 +79,6 @@
   "profiles.dialog_add_title": "➕ Додати профіль",
   "profiles.dialog_edit_title": "✏️ Редагувати: {name}",
   "profiles.dialog_name": "Назва:",
-  "profiles.dialog_mode": "Режим:",
   "profiles.dialog_model": "Модель:",
   "profiles.dialog_desc": "Опис:",
   "profiles.dialog_lang": "Мова:",

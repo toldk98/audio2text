@@ -96,15 +96,15 @@ file:
       diarize: true
 
   distil-large-v2:
-    distil_v2_uk:
-      description: "Швидка транскрипція (distil-large-v2) + діаризація"
-      language: uk
+    distil_v2_en:
+      description: "Fast transcription (distil-large-v2, ENGLISH ONLY) + diarization"
+      language: en
 
       align: true
       diarize: true
-    distil_v2_uk_chunked:
-      description: "Швидка (distil-large-v2) + діаризація, з розбиттям на частини"
-      language: uk
+    distil_v2_en_chunked:
+      description: "Fast (distil-large-v2, ENGLISH ONLY) + diarization, chunked"
+      language: en
 
       align: true
       diarize: true
@@ -112,15 +112,15 @@ file:
       max_workers: 2
 
   distil-large-v3:
-    distil_v3_uk:
-      description: "Швидка транскрипція (distil-large-v3) + діаризація"
-      language: uk
+    distil_v3_en:
+      description: "Fast transcription (distil-large-v3, ENGLISH ONLY) + diarization"
+      language: en
 
       align: true
       diarize: true
-    distil_v3_uk_chunked:
-      description: "Швидка (distil-large-v3) + діаризація, з розбиттям на частини"
-      language: uk
+    distil_v3_en_chunked:
+      description: "Fast (distil-large-v3, ENGLISH ONLY) + diarization, chunked"
+      language: en
 
       align: true
       diarize: true
@@ -128,15 +128,15 @@ file:
       max_workers: 2
 
   distil-large-v3.5:
-    distil_v35_uk:
-      description: "Швидка транскрипція (distil-large-v3.5) + діаризація"
-      language: uk
+    distil_v35_en:
+      description: "Fast transcription (distil-large-v3.5, ENGLISH ONLY) + diarization"
+      language: en
 
       align: true
       diarize: true
-    distil_v35_uk_chunked:
-      description: "Швидка (distil-large-v3.5) + діаризація, з розбиттям на частини"
-      language: uk
+    distil_v35_en_chunked:
+      description: "Fast (distil-large-v3.5, ENGLISH ONLY) + diarization, chunked"
+      language: en
 
       align: true
       diarize: true

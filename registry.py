@@ -12,8 +12,11 @@ SUPPORTED_EXT = {".m4a", ".wav", ".mp3", ".ogg"}
 def load_registry() -> list[dict]:
     if not os.path.exists(REGISTRY_PATH):
         return []
-    with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
-        entries = json.load(f)
+    try:
+        with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
     for entry in entries:
         entry["status"] = "ok" if os.path.exists(entry["path"]) else "missing"
     return entries

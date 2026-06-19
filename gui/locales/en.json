@@ -3,8 +3,6 @@
 
   "common.error": "Error",
   "common.confirm": "Confirm",
-  "common.info": "Info",
-  "common.warning": "Warning",
 
   "tab.transcribe": "Transcribe",
   "tab.log": "Log",
@@ -54,8 +52,6 @@
   "run.log_error": "❌ Error: {e}\n",
   "run.confirm_exit": "Transcription is still running.\nCancel and exit?",
 
-  "log.tab_title": "Log",
-
   "settings.sub_general": "General",
   "settings.sub_profiles": "Profiles",
   "settings.sub_models": "Models",
@@ -83,7 +79,6 @@
   "profiles.dialog_add_title": "➕ Add Profile",
   "profiles.dialog_edit_title": "✏️ Edit: {name}",
   "profiles.dialog_name": "Name:",
-  "profiles.dialog_mode": "Mode:",
   "profiles.dialog_model": "Model:",
   "profiles.dialog_desc": "Description:",
   "profiles.dialog_lang": "Language:",

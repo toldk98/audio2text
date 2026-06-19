@@ -130,15 +130,15 @@ def _model_cache_status(model_size: str) -> str:
         sz = os.path.getsize(whisper_pt)
         return _format_size(sz)
 
-    hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub",
-                          f"models--Systran--faster-whisper-{model_size}")
-    if os.path.isdir(hf_dir):
-        return _format_size(_dir_size(hf_dir))
+    hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
+    if os.path.isdir(nd):
+        return _format_size(_dir_size(nd))
 
-    hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub",
-                          f"models--Systran--faster-distil-whisper-{model_size}")
-    if os.path.isdir(hf_dir):
-        return _format_size(_dir_size(hf_dir))
+    if model_size.startswith("distil-"):
+        d = os.path.join(hf_dir, f"models--Systran--faster-distil-whisper-{model_size[7:]}")
+        if os.path.isdir(d):
+            return _format_size(_dir_size(d))
 
     return f"⚡ {size_str}" if size_str else "⚡"
 
@@ -615,7 +615,7 @@ class Audio2TextApp(tb.Window):
         def _update_model_status(*args):
             s = _model_cache_status(model_var.get())
             model_status_var.set(s)
-            model_status_lbl.configure(foreground="orange" if s.startswith("⚡") else "green")
+            model_status_lbl.configure(bootstyle="warning" if s.startswith("⚡") else "success")
         model_var.trace_add("write", _update_model_status)
         _update_model_status()
 
@@ -752,12 +752,16 @@ class Audio2TextApp(tb.Window):
             messagebox.showwarning(_("common.error"), _("token.err_empty"))
             return
 
-        if not has_keyring():
+        modes = _token_modes()
+        rev_modes = {v: k for k, v in modes.items()}
+        mode_key = rev_modes.get(self.token_mode_cb.get(), "keychain")
+
+        if mode_key == "keychain" and not has_keyring():
             messagebox.showerror(_("common.error"), _("token.err_keychain"))
             return
 
         try:
-            save_token(token, self.token_mode_cb.get())
+            save_token(token, mode_key)
             self.token_status_var.set(_("token.saved"))
         except Exception as e:
             messagebox.showerror(_("common.error"), _("token.err_save", e=e))

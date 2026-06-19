@@ -28,8 +28,10 @@ def load_token() -> tuple[str | None, str | None]:
 
 
 def save_token(token: str, mode: str):
-    import keyring
-    keyring.set_password("audio2text", "hf_token", token)
+    if mode == "keychain":
+        import keyring
+        keyring.set_password("audio2text", "hf_token", token)
+    # mode == "ask": token stays in session memory only, no persistence
 
 
 def has_keyring() -> bool:
@@ -43,16 +45,22 @@ def has_keyring() -> bool:
 
 def load_settings() -> dict:
     if os.path.exists(SETTINGS_PATH):
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
     return {}
 
 
 def save_settings(data: dict):
     existing = {}
     if os.path.exists(SETTINGS_PATH):
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            existing = json.load(f)
+        try:
+            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
     existing.update(data)
     os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
