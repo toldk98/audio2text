@@ -15,7 +15,7 @@ from ttkbootstrap.constants import *
 from profiles import list_profiles, get_profile, upsert_profile, delete_profile
 from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry, load_registry
 from gui.token_manager import load_token, save_token, _token_modes, has_keyring, load_settings, save_settings
-from config import cpu_levels
+from config import cpu_levels, WHISPER_CACHE_DIR, HF_HUB_DIR
 from gui.lang import _, _inst
 
 
@@ -82,7 +82,7 @@ def _format_size(size: int) -> str:
 def _scan_model_cache() -> list[dict]:
     entries = []
 
-    whisper_dir = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
+    whisper_dir = WHISPER_CACHE_DIR
     if os.path.isdir(whisper_dir):
         for fname in os.listdir(whisper_dir):
             fpath = os.path.join(whisper_dir, fname)
@@ -95,7 +95,7 @@ def _scan_model_cache() -> list[dict]:
                             "date": time.strftime("%Y-%m-%d", time.localtime(mtime)),
                             "path": fpath})
 
-    hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    hf_dir = HF_HUB_DIR
     if os.path.isdir(hf_dir):
         for entry in sorted(os.listdir(hf_dir)):
             if not entry.startswith("models--"):
@@ -126,12 +126,12 @@ _MODEL_SIZES = {
 
 def _model_cache_status(model_size: str) -> str:
     size_str = _MODEL_SIZES.get(model_size, "")
-    whisper_pt = os.path.join(os.path.expanduser("~"), ".cache", "whisper", f"{model_size}.pt")
+    whisper_pt = os.path.join(WHISPER_CACHE_DIR, f"{model_size}.pt")
     if os.path.isfile(whisper_pt):
         sz = os.path.getsize(whisper_pt)
         return _format_size(sz)
 
-    hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    hf_dir = HF_HUB_DIR
     nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
     if os.path.isdir(nd):
         return _format_size(_dir_size(nd))
@@ -490,6 +490,7 @@ class Audio2TextApp(tb.Window):
         if lang == _inst.current:
             return
         _inst.switch_to(lang)
+        save_settings({"lang": lang})
 
         self._notebook.tab(0, text=_("tab.transcribe"))
         self._notebook.tab(1, text=_("tab.log"))

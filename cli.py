@@ -3,17 +3,16 @@ import os
 import sys
 import shutil
 import time
-from pathlib import Path
 from dotenv import load_dotenv
 
-from config import model_name_list, chunk_options
+from config import model_name_list, chunk_options, WHISPER_CACHE_DIR, HF_HUB_DIR
 from whisper_offline import WhisperTranscriber, DownloadCancelledError
 from whisper_realtime import WhisperRealtimeTranscriber
 
 load_dotenv()
 
-_WHISPER_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
-_HF_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+_WHISPER_CACHE = WHISPER_CACHE_DIR
+_HF_CACHE = HF_HUB_DIR
 
 _PROFILE_KEYS = {
     "model": "model_name",

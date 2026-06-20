@@ -2,6 +2,7 @@
 .envrc
 profiles.yaml
 new_idea.md
+manual_test.md
 *.wav
 *.m4a
 _clean.*

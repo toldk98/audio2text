@@ -11,6 +11,7 @@ from split_audio import split_audio, dedup_segments, _get_duration
 from logger import get_logger
 from timing import TimingDB
 from workdir import WorkDir
+from config import WHISPER_CACHE_DIR, HF_HUB_DIR
 
 logger = get_logger(__name__)
 
@@ -54,12 +55,7 @@ def _check_resources(model_size: str, do_align: bool, do_diarize: bool) -> tuple
 
     # 2. Disk for model download (error — blocks if not cached AND full)
     if not _model_cached(model_size):
-        candidates = [
-            os.path.expanduser("~/.cache/huggingface/hub"),
-            os.path.expanduser("~/.cache/whisper"),
-            os.path.expanduser("~/.cache"),
-            os.path.expanduser("~"),
-        ]
+        candidates = [HF_HUB_DIR, WHISPER_CACHE_DIR, os.path.expanduser("~")]
         cache_dir = next((d for d in candidates if os.path.exists(d)),
                          os.path.expanduser("~"))
         free_disk_mb = psutil.disk_usage(cache_dir).free / 1024 / 1024
@@ -146,11 +142,10 @@ class TranscriptionCancelledError(Exception):
 
 
 def _model_cached(model_size: str) -> bool:
-    whisper_dir = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
-    if os.path.isfile(os.path.join(whisper_dir, f"{model_size}.pt")):
+    if os.path.isfile(os.path.join(WHISPER_CACHE_DIR, f"{model_size}.pt")):
         return True
 
-    hf_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    hf_dir = HF_HUB_DIR
     # Non-distil models: faster-whisper-{model_size}
     nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
     if os.path.isdir(nd):

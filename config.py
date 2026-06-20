@@ -1,3 +1,5 @@
+import os
+
 model_name_list = [
     "tiny",
     "base",
@@ -38,3 +40,6 @@ cpu_levels = [
     "medium",
     "low",
 ]
+
+WHISPER_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
+HF_HUB_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")

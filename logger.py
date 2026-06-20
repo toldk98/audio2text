@@ -6,7 +6,7 @@ from logging.handlers import RotatingFileHandler
 
 import platformdirs
 
-LOG_DIR = os.path.join(platformdirs.user_log_dir("audio2text"), "logs")
+LOG_DIR = platformdirs.user_log_dir("audio2text")
 _LOG_CONFIGURED = False
 
 
