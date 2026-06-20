@@ -21,7 +21,7 @@ Runs on CPU and NVIDIA GPU.
 - **Audio filter** — pre-processing (full / light / off)
 
 **Interface**
-- **GUI** — graphical interface (ttkbootstrap) with dual-language support (UK/EN)
+- **GUI** — graphical interface (ttkbootstrap) with on-the-fly language switching
 - **CLI** — command line
 - **Profiles** — saved configuration presets (YAML), create/edit via GUI
 - **File Registry** — quick access to external audio files
@@ -249,9 +249,24 @@ The registry is stored in `~/.local/share/audio2text/external_registry.json`.
 
 ## Interface Language
 
-The GUI supports Ukrainian and English.
-Switch: **Settings → General → Language**.
-Restart the application after changing.
+The GUI supports Ukrainian and English by default.
+Switch: **Settings → General → Language** → pick a language → **Apply**.
+The language changes immediately, no restart needed.
+
+### Add a new language
+
+Copy a locale file (e.g. `fr.json`) with the same structure as `en.json` into `gui/locales/`.
+The combobox will pick it up automatically after a language switch or restart.
+
+The file must contain a `"lang.XX"` key with the language name for the combobox and translations of the required strings:
+
+```json
+{
+  "lang.fr": "Français",
+  "tab.transcribe": "Transcription",
+  ...
+}
+```
 
 ## Directory Structure
 

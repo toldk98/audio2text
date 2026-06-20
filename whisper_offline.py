@@ -294,8 +294,6 @@ class WhisperTranscriber:
             logger.info(f"[INFO] Створено очищений файл: {clean_path}")
             return clean_path
         except subprocess.CalledProcessError as e:
-            if os.path.exists(clean_path) and not self.work_dir:
-                os.unlink(clean_path)
             logger.warning("[WARN] ffmpeg завершився з помилкою, використовується оригінальний файл.")
             logger.warning(e.stderr.decode("utf-8", errors="ignore"))
             return input_audio

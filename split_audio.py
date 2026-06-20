@@ -1,16 +1,14 @@
 import os
 import subprocess
-import tempfile
 
 
 def split_audio(audio_path: str, chunk_sec: int = 600, overlap_sec: int = 5,
-                output_dir: str | None = None) -> list[tuple[str, float]]:
+                output_dir: str = "") -> list[tuple[str, float]]:
+    if not output_dir:
+        raise ValueError("output_dir is required")
     base = os.path.splitext(os.path.basename(audio_path))[0]
-    if output_dir is None:
-        tmpdir = tempfile.mkdtemp(prefix=f"{base}_chunks_")
-    else:
-        os.makedirs(output_dir, exist_ok=True)
-        tmpdir = output_dir
+    os.makedirs(output_dir, exist_ok=True)
+    tmpdir = output_dir
 
     duration = _get_duration(audio_path)
     if duration is None:

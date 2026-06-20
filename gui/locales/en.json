@@ -64,7 +64,8 @@
   "settings.models_auto_hint": "When disabled — a warning appears before downloading and transcription is cancelled.",
   "settings.lang_frame": "Interface Language",
   "settings.lang_label": "Language:",
-  "settings.lang_restart_hint": "Restart the app for changes to take effect.",
+  "settings.lang_apply": "Apply",
+  "settings.lang_restart_hint": "Click «Apply» to switch language immediately.",
 
   "profiles.sub_file": "File",
 

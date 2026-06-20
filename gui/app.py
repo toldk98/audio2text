@@ -13,7 +13,7 @@ import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 
 from profiles import list_profiles, get_profile, upsert_profile, delete_profile
-from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry
+from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry, load_registry
 from gui.token_manager import load_token, save_token, _token_modes, has_keyring, load_settings, save_settings
 from config import cpu_levels
 from gui.lang import _, _inst
@@ -49,10 +49,12 @@ class _LogRedirector(io.TextIOBase):
     def __init__(self, msg_queue: queue.Queue):
         self.queue = msg_queue
         self.original = sys.stdout
+        self._lock = threading.Lock()
 
     def write(self, message):
-        self.original.write(message)
-        self.queue.put(message)
+        with self._lock:
+            self.original.write(message)
+            self.queue.put(message)
 
     def flush(self):
         self.original.flush()
@@ -70,8 +72,7 @@ def _dir_size(path: str) -> int:
 
 
 def _format_size(size: int) -> str:
-    units = [("size.bytes", "Б"), ("size.kb", "КБ"), ("size.mb", "МБ"), ("size.gb", "ГБ")]
-    for key, _fallback in units:
+    for key in ("size.bytes", "size.kb", "size.mb", "size.gb"):
         if abs(size) < 1024:
             return f"{size:.1f} {_(key)}"
         size /= 1024
@@ -155,6 +156,19 @@ def _filter_display_map() -> dict[str, str]:
     return {"full": _("filter.value_full"), "light": _("filter.value_light"), "off": _("filter.value_off")}
 
 
+def _lang_display_map() -> dict[str, str]:
+    import os
+    locales_dir = os.path.join(os.path.dirname(__file__), "locales")
+    codes = []
+    try:
+        for fn in sorted(os.listdir(locales_dir)):
+            if fn.endswith(".json"):
+                codes.append(fn[:-5])
+    except OSError:
+        codes = ["uk", "en"]
+    return {code: _(f"lang.{code}") for code in codes}
+
+
 class Audio2TextApp(tb.Window):
     def __init__(self):
         settings = load_settings()
@@ -191,73 +205,78 @@ class Audio2TextApp(tb.Window):
         parent.columnconfigure(0, weight=1)
 
         # --- File ---
-        frame = tb.LabelFrame(parent, text=_("file.frame"))
-        frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
-        frame.columnconfigure(1, weight=1)
+        self._file_frame = tb.LabelFrame(parent, text=_("file.frame"))
+        self._file_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
+        self._file_frame.columnconfigure(1, weight=1)
 
         self.file_var = tk.StringVar(value=AUDIO_DIR)
-        tb.Entry(frame, textvariable=self.file_var).grid(row=0, column=1, sticky=EW, padx=(5, 5))
-        tb.Button(frame, text=_("file.browse"), command=self._browse_file).grid(row=0, column=2)
+        tb.Entry(self._file_frame, textvariable=self.file_var).grid(row=0, column=1, sticky=EW, padx=(5, 5))
+        self._browse_btn = tb.Button(self._file_frame, text=_("file.browse"), command=self._browse_file)
+        self._browse_btn.grid(row=0, column=2)
 
         self._reg_refresh_var = tk.StringVar()
-        tb.Label(frame, text=_("file.registry_label")).grid(row=1, column=0, padx=(0, 5), pady=(5, 0))
-        self.reg_cb = tb.Combobox(frame, textvariable=self._reg_refresh_var,
+        self._reg_label = tb.Label(self._file_frame, text=_("file.registry_label"))
+        self._reg_label.grid(row=1, column=0, padx=(0, 5), pady=(5, 0))
+        self.reg_cb = tb.Combobox(self._file_frame, textvariable=self._reg_refresh_var,
                                   values=[], state="readonly", width=50)
         self.reg_cb.grid(row=1, column=1, sticky=EW, padx=(5, 5), pady=(5, 0))
         self.reg_cb.bind("<<ComboboxSelected>>", self._on_registry_pick)
-        tb.Button(frame, text=_("file.add_to_registry"), command=self._add_to_registry,
-                  width=14).grid(row=1, column=2, pady=(5, 0))
+        self._reg_add_btn = tb.Button(self._file_frame, text=_("file.add_to_registry"),
+                                      command=self._add_to_registry, width=14)
+        self._reg_add_btn.grid(row=1, column=2, pady=(5, 0))
         self._refresh_registry_list()
 
         # --- Token ---
-        frame = tb.LabelFrame(parent, text=_("token.frame"))
-        frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
-        frame.columnconfigure(1, weight=1)
+        self._token_frame = tb.LabelFrame(parent, text=_("token.frame"))
+        self._token_frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
+        self._token_frame.columnconfigure(1, weight=1)
 
         self.token_var = tk.StringVar()
-        self.token_entry = tb.Entry(frame, textvariable=self.token_var, show="*", width=50)
+        self.token_entry = tb.Entry(self._token_frame, textvariable=self.token_var, show="*", width=50)
         self.token_entry.grid(row=0, column=1, sticky=EW, padx=(5, 5))
 
         self.token_mode_var = tk.StringVar()
-        self.token_mode_cb = tb.Combobox(frame, textvariable=self.token_mode_var,
+        self.token_mode_cb = tb.Combobox(self._token_frame, textvariable=self.token_mode_var,
                                           values=list(_token_modes().values()), state="readonly", width=30)
         self.token_mode_cb.grid(row=0, column=2, padx=(0, 5))
 
-        tb.Button(frame, text=_("token.save"), command=self._save_token).grid(row=0, column=3)
+        self._save_token_btn = tb.Button(self._token_frame, text=_("token.save"), command=self._save_token)
+        self._save_token_btn.grid(row=0, column=3)
 
         self.token_status_var = tk.StringVar(value="")
-        tb.Label(frame, textvariable=self.token_status_var, foreground="gray").grid(
+        tb.Label(self._token_frame, textvariable=self.token_status_var, foreground="gray").grid(
             row=1, column=1, columnspan=3, sticky=W, pady=(3, 0))
 
         # --- Profile ---
-        frame = tb.LabelFrame(parent, text=_("profile.frame"))
-        frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
-        frame.columnconfigure(1, weight=1)
+        self._profile_frame = tb.LabelFrame(parent, text=_("profile.frame"))
+        self._profile_frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
+        self._profile_frame.columnconfigure(1, weight=1)
 
         self.profile_var = tk.StringVar()
         names = _profile_names()
-        self.profile_cb = tb.Combobox(frame, textvariable=self.profile_var,
+        self.profile_cb = tb.Combobox(self._profile_frame, textvariable=self.profile_var,
                                       values=names, state="readonly", width=40)
         self.profile_cb.grid(row=0, column=1, sticky=W, padx=(5, 0))
         if names:
             self.profile_cb.current(0)
 
         self.profile_desc_var = tk.StringVar()
-        tb.Label(frame, textvariable=self.profile_desc_var, foreground="gray", wraplength=600).grid(
+        tb.Label(self._profile_frame, textvariable=self.profile_desc_var, foreground="gray", wraplength=600).grid(
             row=1, column=1, sticky=W, padx=(5, 0), pady=(3, 0))
 
         # --- CPU Load ---
         cpu_frame = tb.Frame(parent)
         cpu_frame.grid(row=3, column=0, sticky=W, pady=(5, 0), padx=10)
-        tb.Label(cpu_frame, text=_("cpu.label"), foreground="gray").pack(side=LEFT, padx=(0, 5))
+        self._cpu_label = tb.Label(cpu_frame, text=_("cpu.label"), foreground="gray")
+        self._cpu_label.pack(side=LEFT, padx=(0, 5))
         cpu_disp = _cpu_display_map()
         self.cpu_var = tk.StringVar(value=cpu_disp["high"])
         self.cpu_cb = tb.Combobox(cpu_frame, textvariable=self.cpu_var,
                                   values=list(cpu_disp.values()), state="readonly", width=12)
         self.cpu_cb.pack(side=LEFT)
         _ToolTip(self.cpu_cb, _("cpu.tooltip"))
-        cpu_hint = tb.Label(cpu_frame, text=_("cpu.override_hint"), foreground="gray")
-        cpu_hint.pack(side=LEFT, padx=(8, 0))
+        self._cpu_override_hint = tb.Label(cpu_frame, text=_("cpu.override_hint"), foreground="gray")
+        self._cpu_override_hint.pack(side=LEFT, padx=(8, 0))
 
         self.profile_cb.bind("<<ComboboxSelected>>", self._update_profile_desc)
         self._update_profile_desc()
@@ -290,60 +309,64 @@ class Audio2TextApp(tb.Window):
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(0, weight=1)
 
-        sub = tb.Notebook(parent)
-        sub.grid(row=0, column=0, sticky=NSEW, padx=10, pady=(10, 10))
+        self._settings_sub = tb.Notebook(parent)
+        self._settings_sub.grid(row=0, column=0, sticky=NSEW, padx=10, pady=(10, 10))
 
         # --- Sub-tab: General (Theme + Language) ---
-        general = tb.Frame(sub)
-        general.columnconfigure(0, weight=1)
-        sub.add(general, text=_("settings.sub_general"))
+        self._general_frame = tb.Frame(self._settings_sub)
+        self._general_frame.columnconfigure(0, weight=1)
+        self._settings_sub.add(self._general_frame, text=_("settings.sub_general"))
 
-        theme_frame = tb.LabelFrame(general, text=_("settings.theme_frame"))
-        theme_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
-        theme_frame.columnconfigure(1, weight=1)
+        self._theme_frame = tb.LabelFrame(self._general_frame, text=_("settings.theme_frame"))
+        self._theme_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
+        self._theme_frame.columnconfigure(1, weight=1)
 
         self.theme_var = tk.StringVar(value=self.style.theme.name)
         themes = sorted(self.style.theme_names())
-        tb.Combobox(theme_frame, textvariable=self.theme_var, values=themes,
+        tb.Combobox(self._theme_frame, textvariable=self.theme_var, values=themes,
                     state="readonly", width=30).grid(row=0, column=1, sticky=W, padx=(5, 5))
-        tb.Button(theme_frame, text=_("settings.theme_apply"), command=self._apply_theme).grid(row=0, column=2)
+        self._theme_apply_btn = tb.Button(self._theme_frame, text=_("settings.theme_apply"),
+                                          command=self._apply_theme)
+        self._theme_apply_btn.grid(row=0, column=2)
 
-        lang_frame = tb.LabelFrame(general, text=_("settings.lang_frame"))
-        lang_frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
-        lang_frame.columnconfigure(1, weight=1)
-        tb.Label(lang_frame, text=_("settings.lang_label")).grid(row=0, column=0, sticky=W, padx=(10, 5), pady=5)
-        self.lang_var = tk.StringVar(value=_inst.current)
-        lang_cb = tb.Combobox(lang_frame, textvariable=self.lang_var,
-                              values=["uk", "en"], state="readonly", width=10)
-        lang_cb.grid(row=0, column=1, sticky=W, padx=(0, 10), pady=5)
-        lang_cb.bind("<<ComboboxSelected>>", self._on_lang_change)
-        tb.Label(lang_frame, text=_("settings.lang_restart_hint"),
-                 foreground="gray").grid(row=1, column=0, columnspan=2, sticky=W, padx=(10, 5), pady=(0, 5))
+        self._lang_frame = tb.LabelFrame(self._general_frame, text=_("settings.lang_frame"))
+        self._lang_frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
+        self._lang_frame.columnconfigure(1, weight=1)
+        self._lang_label = tb.Label(self._lang_frame, text=_("settings.lang_label"))
+        self._lang_label.grid(row=0, column=0, sticky=W, padx=(10, 5), pady=5)
+        ldm = _lang_display_map()
+        self.lang_var = tk.StringVar(value=ldm.get(_inst.current, "uk"))
+        self._lang_cb = tb.Combobox(self._lang_frame, textvariable=self.lang_var,
+                                    values=sorted(ldm.values()), state="readonly", width=16)
+        self._lang_cb.grid(row=0, column=1, sticky=W, padx=(0, 10), pady=5)
+        self._lang_apply_btn = tb.Button(self._lang_frame, text=_("settings.lang_apply"),
+                                         command=self._apply_lang)
+        self._lang_apply_btn.grid(row=0, column=2)
 
-        general.rowconfigure(2, weight=1)
+        self._general_frame.rowconfigure(2, weight=1)
 
         # --- Sub-tab: Profiles ---
-        profiles = tb.Frame(sub)
+        profiles = tb.Frame(self._settings_sub)
         profiles.columnconfigure(0, weight=1)
         profiles.rowconfigure(0, weight=1)
-        sub.add(profiles, text=_("settings.sub_profiles"))
+        self._settings_sub.add(profiles, text=_("settings.sub_profiles"))
 
-        sub2 = tb.Notebook(profiles)
-        sub2.grid(row=0, column=0, sticky=NSEW, padx=0, pady=0)
+        self._profiles_sub = tb.Notebook(profiles)
+        self._profiles_sub.grid(row=0, column=0, sticky=NSEW, padx=0, pady=0)
 
-        # v2.0: add realtime tab via sub2.add(realtime_tab, text=_("settings.sub_realtime"))
+        # v2.0: add realtime tab via self._profiles_sub.add(realtime_tab, text=_("settings.sub_realtime"))
 
-        file_tab = tb.Frame(sub2)
+        file_tab = tb.Frame(self._profiles_sub)
         file_tab.columnconfigure(0, weight=1)
         file_tab.rowconfigure(0, weight=1)
-        sub2.add(file_tab, text=_("profiles.sub_file"))
+        self._profiles_sub.add(file_tab, text=_("profiles.sub_file"))
 
-        pf_frame = tb.LabelFrame(file_tab, text=_("profiles.frame"))
-        pf_frame.grid(row=0, column=0, sticky=NSEW, pady=(10, 10), padx=10)
-        pf_frame.columnconfigure(0, weight=1)
-        pf_frame.rowconfigure(0, weight=1)
+        self._pf_frame = tb.LabelFrame(file_tab, text=_("profiles.frame"))
+        self._pf_frame.grid(row=0, column=0, sticky=NSEW, pady=(10, 10), padx=10)
+        self._pf_frame.columnconfigure(0, weight=1)
+        self._pf_frame.rowconfigure(0, weight=1)
 
-        self.profile_tree = ttk.Treeview(pf_frame, columns=("name", "model", "lang", "opts"),
+        self.profile_tree = ttk.Treeview(self._pf_frame, columns=("name", "model", "lang", "opts"),
                                          show="headings", selectmode="browse")
         self.profile_tree.heading("name", text=_("profiles.col_name"))
         self.profile_tree.heading("model", text=_("profiles.col_model"))
@@ -356,44 +379,51 @@ class Audio2TextApp(tb.Window):
         self.profile_tree.grid(row=0, column=0, sticky=NSEW, pady=(5, 5), padx=5)
         self.profile_tree.bind("<Double-1>", lambda e: self._edit_selected_profile())
 
-        pf_btn_row = tb.Frame(pf_frame)
+        pf_btn_row = tb.Frame(self._pf_frame)
         pf_btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
-        tb.Button(pf_btn_row, text=_("profiles.add"), command=self._add_profile_dialog,
-                  width=12).pack(side=LEFT, padx=(0, 3))
-        tb.Button(pf_btn_row, text=_("profiles.edit"), command=self._edit_selected_profile,
-                  width=14).pack(side=LEFT, padx=(0, 3))
-        tb.Button(pf_btn_row, text=_("profiles.delete"), bootstyle="danger",
-                  command=self._delete_selected_profile, width=12).pack(side=LEFT)
+        self._pf_add_btn = tb.Button(pf_btn_row, text=_("profiles.add"), command=self._add_profile_dialog,
+                                     width=12)
+        self._pf_add_btn.pack(side=LEFT, padx=(0, 3))
+        self._pf_edit_btn = tb.Button(pf_btn_row, text=_("profiles.edit"), command=self._edit_selected_profile,
+                                      width=14)
+        self._pf_edit_btn.pack(side=LEFT, padx=(0, 3))
+        self._pf_del_btn = tb.Button(pf_btn_row, text=_("profiles.delete"), bootstyle="danger",
+                                     command=self._delete_selected_profile, width=12)
+        self._pf_del_btn.pack(side=LEFT)
 
         # --- Sub-tab: Models (auto-download + cache) ---
-        models = tb.Frame(sub)
+        models = tb.Frame(self._settings_sub)
         models.columnconfigure(0, weight=1)
         models.rowconfigure(1, weight=1)
-        sub.add(models, text=_("settings.sub_models"))
+        self._settings_sub.add(models, text=_("settings.sub_models"))
 
-        mdl_frame = tb.LabelFrame(models, text=_("settings.models_frame"))
-        mdl_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
+        self._mdl_frame = tb.LabelFrame(models, text=_("settings.models_frame"))
+        self._mdl_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
 
         self.allow_dl_var = tk.BooleanVar(value=True)
-        tb.Checkbutton(mdl_frame, text=_("settings.models_auto"),
-                       variable=self.allow_dl_var).grid(row=0, column=0, sticky=W, pady=5, padx=5)
-        tb.Label(mdl_frame, text=_("settings.models_auto_hint"), foreground="gray", wraplength=600).grid(
-            row=1, column=0, sticky=W, padx=(15, 5), pady=(0, 5))
+        self._auto_dl_check = tb.Checkbutton(self._mdl_frame, text=_("settings.models_auto"),
+                                             variable=self.allow_dl_var)
+        self._auto_dl_check.grid(row=0, column=0, sticky=W, pady=5, padx=5)
+        self._auto_dl_hint = tb.Label(self._mdl_frame, text=_("settings.models_auto_hint"),
+                                      foreground="gray", wraplength=600)
+        self._auto_dl_hint.grid(row=1, column=0, sticky=W, padx=(15, 5), pady=(0, 5))
 
-        cache_frame = tb.LabelFrame(models, text=_("cache.frame"))
-        cache_frame.grid(row=1, column=0, sticky=NSEW, pady=5, padx=10)
-        cache_frame.columnconfigure(0, weight=1)
-        cache_frame.rowconfigure(1, weight=1)
+        self._cache_frame = tb.LabelFrame(models, text=_("cache.frame"))
+        self._cache_frame.grid(row=1, column=0, sticky=NSEW, pady=5, padx=10)
+        self._cache_frame.columnconfigure(0, weight=1)
+        self._cache_frame.rowconfigure(1, weight=1)
 
-        cache_btn_row = tb.Frame(cache_frame)
+        cache_btn_row = tb.Frame(self._cache_frame)
         cache_btn_row.grid(row=0, column=0, sticky=W, pady=(5, 0), padx=5)
-        tb.Button(cache_btn_row, text=_("cache.refresh"), command=self._refresh_cache_list,
-                  width=14).pack(side=LEFT, padx=(0, 5))
-        tb.Button(cache_btn_row, text=_("cache.delete_selected"), bootstyle="danger",
-                  command=self._delete_selected_cache).pack(side=LEFT)
+        self._cache_refresh_btn = tb.Button(cache_btn_row, text=_("cache.refresh"),
+                                            command=self._refresh_cache_list, width=14)
+        self._cache_refresh_btn.pack(side=LEFT, padx=(0, 5))
+        self._cache_del_btn = tb.Button(cache_btn_row, text=_("cache.delete_selected"),
+                                        bootstyle="danger", command=self._delete_selected_cache)
+        self._cache_del_btn.pack(side=LEFT)
 
         cache_columns = ("name", "type", "size", "date")
-        self.cache_tree = ttk.Treeview(cache_frame, columns=cache_columns, show="headings",
+        self.cache_tree = ttk.Treeview(self._cache_frame, columns=cache_columns, show="headings",
                                        selectmode="extended")
         self.cache_tree.heading("name", text=_("cache.col_name"))
         self.cache_tree.heading("type", text=_("cache.col_type"))
@@ -406,21 +436,21 @@ class Audio2TextApp(tb.Window):
         self.cache_tree.grid(row=1, column=0, sticky=NSEW, pady=5, padx=5)
 
         self.cache_total_var = tk.StringVar(value="")
-        tb.Label(cache_frame, textvariable=self.cache_total_var, foreground="gray").grid(
+        tb.Label(self._cache_frame, textvariable=self.cache_total_var, foreground="gray").grid(
             row=2, column=0, sticky=E, padx=10, pady=(0, 5))
 
         # --- Sub-tab: Files (Registry) ---
-        files = tb.Frame(sub)
+        files = tb.Frame(self._settings_sub)
         files.columnconfigure(0, weight=1)
         files.rowconfigure(0, weight=1)
-        sub.add(files, text=_("settings.sub_files"))
+        self._settings_sub.add(files, text=_("settings.sub_files"))
 
-        reg_frame = tb.LabelFrame(files, text=_("registry.frame"))
-        reg_frame.grid(row=0, column=0, sticky=NSEW, pady=(10, 10), padx=10)
-        reg_frame.columnconfigure(0, weight=1)
-        reg_frame.rowconfigure(0, weight=1)
+        self._reg_frame = tb.LabelFrame(files, text=_("registry.frame"))
+        self._reg_frame.grid(row=0, column=0, sticky=NSEW, pady=(10, 10), padx=10)
+        self._reg_frame.columnconfigure(0, weight=1)
+        self._reg_frame.rowconfigure(0, weight=1)
 
-        self.reg_tree = ttk.Treeview(reg_frame, columns=("name", "path", "status"),
+        self.reg_tree = ttk.Treeview(self._reg_frame, columns=("name", "path", "status"),
                                      show="headings", selectmode="browse")
         self.reg_tree.heading("name", text=_("registry.col_name"))
         self.reg_tree.heading("path", text=_("registry.col_path"))
@@ -430,14 +460,17 @@ class Audio2TextApp(tb.Window):
         self.reg_tree.column("status", width=60)
         self.reg_tree.grid(row=0, column=0, sticky=NSEW, pady=(5, 5), padx=5)
 
-        reg_btn_row = tb.Frame(reg_frame)
+        reg_btn_row = tb.Frame(self._reg_frame)
         reg_btn_row.grid(row=1, column=0, sticky=W, padx=5, pady=(0, 5))
-        tb.Button(reg_btn_row, text=_("registry.refresh"), command=self._refresh_registry_tree,
-                  width=4).pack(side=LEFT, padx=(0, 3))
-        tb.Button(reg_btn_row, text=_("registry.delete"), bootstyle="danger",
-                  command=self._delete_selected_registry, width=14).pack(side=LEFT, padx=(0, 3))
-        tb.Button(reg_btn_row, text=_("registry.clean_dead"), command=self._clean_dead_registry,
-                  width=14).pack(side=LEFT)
+        self._reg_refresh_btn = tb.Button(reg_btn_row, text=_("registry.refresh"),
+                                          command=self._refresh_registry_tree, width=4)
+        self._reg_refresh_btn.pack(side=LEFT, padx=(0, 3))
+        self._reg_del_btn = tb.Button(reg_btn_row, text=_("registry.delete"), bootstyle="danger",
+                                      command=self._delete_selected_registry, width=14)
+        self._reg_del_btn.pack(side=LEFT, padx=(0, 3))
+        self._reg_clean_btn = tb.Button(reg_btn_row, text=_("registry.clean_dead"),
+                                        command=self._clean_dead_registry, width=14)
+        self._reg_clean_btn.pack(side=LEFT)
 
         self._cache_entries: list[dict] = []
         self._refresh_cache_list()
@@ -450,10 +483,71 @@ class Audio2TextApp(tb.Window):
             self.style.theme_use(name)
             save_settings({"theme": name})
 
-    def _on_lang_change(self, event=None):
-        lang = self.lang_var.get()
-        if lang != _inst.current:
-            _inst.switch_to(lang)
+    def _apply_lang(self):
+        ldm = _lang_display_map()
+        rev = {v: k for k, v in ldm.items()}
+        lang = rev.get(self.lang_var.get(), "uk")
+        if lang == _inst.current:
+            return
+        _inst.switch_to(lang)
+
+        self._notebook.tab(0, text=_("tab.transcribe"))
+        self._notebook.tab(1, text=_("tab.log"))
+        self._notebook.tab(2, text=_("tab.settings"))
+
+        self._file_frame.configure(text=_("file.frame"))
+        self._browse_btn.configure(text=_("file.browse"))
+        self._reg_label.configure(text=_("file.registry_label"))
+        self._reg_add_btn.configure(text=_("file.add_to_registry"))
+        self._token_frame.configure(text=_("token.frame"))
+        self._save_token_btn.configure(text=_("token.save"))
+        self._profile_frame.configure(text=_("profile.frame"))
+        self._cpu_label.configure(text=_("cpu.label"))
+        self._cpu_override_hint.configure(text=_("cpu.override_hint"))
+        self.run_btn.configure(text=_("run.start"))
+
+        self._settings_sub.tab(0, text=_("settings.sub_general"))
+        self._settings_sub.tab(1, text=_("settings.sub_profiles"))
+        self._settings_sub.tab(2, text=_("settings.sub_models"))
+        self._settings_sub.tab(3, text=_("settings.sub_files"))
+        self._theme_frame.configure(text=_("settings.theme_frame"))
+        self._theme_apply_btn.configure(text=_("settings.theme_apply"))
+        self._lang_frame.configure(text=_("settings.lang_frame"))
+        self._lang_label.configure(text=_("settings.lang_label"))
+        self._lang_apply_btn.configure(text=_("settings.lang_apply"))
+
+        self._profiles_sub.tab(0, text=_("profiles.sub_file"))
+        self._pf_frame.configure(text=_("profiles.frame"))
+        self._pf_add_btn.configure(text=_("profiles.add"))
+        self._pf_edit_btn.configure(text=_("profiles.edit"))
+        self._pf_del_btn.configure(text=_("profiles.delete"))
+        self.profile_tree.heading("name", text=_("profiles.col_name"))
+        self.profile_tree.heading("model", text=_("profiles.col_model"))
+        self.profile_tree.heading("lang", text=_("profiles.col_lang"))
+        self.profile_tree.heading("opts", text=_("profiles.col_opts"))
+
+        self._mdl_frame.configure(text=_("settings.models_frame"))
+        self._auto_dl_check.configure(text=_("settings.models_auto"))
+        self._auto_dl_hint.configure(text=_("settings.models_auto_hint"))
+        self._cache_frame.configure(text=_("cache.frame"))
+        self._cache_refresh_btn.configure(text=_("cache.refresh"))
+        self._cache_del_btn.configure(text=_("cache.delete_selected"))
+        self.cache_tree.heading("name", text=_("cache.col_name"))
+        self.cache_tree.heading("type", text=_("cache.col_type"))
+        self.cache_tree.heading("size", text=_("cache.col_size"))
+        self.cache_tree.heading("date", text=_("cache.col_date"))
+
+        self._reg_frame.configure(text=_("registry.frame"))
+        self._reg_refresh_btn.configure(text=_("registry.refresh"))
+        self._reg_del_btn.configure(text=_("registry.delete"))
+        self._reg_clean_btn.configure(text=_("registry.clean_dead"))
+        self.reg_tree.heading("name", text=_("registry.col_name"))
+        self.reg_tree.heading("path", text=_("registry.col_path"))
+        self.reg_tree.heading("status", text=_("registry.col_status"))
+
+        ldm = _lang_display_map()
+        self.lang_var.set(ldm.get(lang, "uk"))
+        self._lang_cb.configure(values=sorted(ldm.values()))
 
     # ---------- cache ----------
     def _refresh_cache_list(self):
@@ -491,10 +585,9 @@ class Audio2TextApp(tb.Window):
 
     # ---------- registry ----------
     def _refresh_registry_tree(self):
-        import registry as reg
         for item in self.reg_tree.get_children():
             self.reg_tree.delete(item)
-        entries = reg.load_registry()
+        entries = load_registry()
         if not entries:
             self.reg_tree.insert("", tk.END, values=(_("registry.empty_placeholder"), "", ""))
         for e in entries:
@@ -552,8 +645,6 @@ class Audio2TextApp(tb.Window):
         self._update_profile_desc()
 
     def _open_profile_dialog(self, title: str, initial: dict | None = None, mode: str = "file") -> dict | None:
-        from config import language_list
-
         dialog = tb.Toplevel(self)
         dialog.title(title)
         dialog.transient(self)
@@ -564,9 +655,7 @@ class Audio2TextApp(tb.Window):
 
         result: dict = {}
 
-        lang_display_map = {}
-        for code in language_list:
-            lang_display_map[_(f"lang.{code}")] = code
+        lang_display_map = {v: k for k, v in _lang_display_map().items()}
 
         row = 0
         tb.Label(dialog, text=_("profiles.dialog_name")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=(10, 2))

@@ -235,7 +235,8 @@ def _pick_profile() -> tuple[str, dict] | None:
     script_tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False)
     script_tmp.write(f"""#!/usr/bin/env python3
 import json, sys
-d = json.load(open({profiles_path!r}))
+with open({profiles_path!r}) as f:
+    d = json.load(f)
 raw = sys.argv[1] if len(sys.argv) > 1 else ""
 parts = raw.split("\\t")
 name = parts[1] if len(parts) > 1 and parts[1] != "__HEADER__" else ""

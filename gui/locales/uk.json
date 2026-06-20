@@ -64,7 +64,8 @@
   "settings.models_auto_hint": "Коли вимкнено — перед завантаженням моделі з'явиться попередження, і транскрипцію буде скасовано.",
   "settings.lang_frame": "Мова інтерфейсу",
   "settings.lang_label": "Мова:",
-  "settings.lang_restart_hint": "Перезапустіть програму, щоб зміни набули чинності.",
+  "settings.lang_apply": "Застосувати",
+  "settings.lang_restart_hint": "Натисніть «Застосувати», щоб одразу змінити мову.",
 
   "profiles.sub_file": "Файлові",
 
