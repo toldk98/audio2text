@@ -3,17 +3,16 @@ import os
 import secrets
 import shutil
 from datetime import datetime
+from workdirs import WorkDirs
 
-import platformdirs
 
-
-class WorkDir:
+class SessionDir:
     _base_dir: str | None = None
 
     @classmethod
     def _default_base(cls) -> str:
         if cls._base_dir is None:
-            cls._base_dir = platformdirs.user_cache_dir("audio2text")
+            cls._base_dir = WorkDirs().cache_dir
         return cls._base_dir
 
     def __init__(self, input_path: str, base_dir: str | None = None):
@@ -28,7 +27,7 @@ class WorkDir:
         self._cleaned_audio = os.path.join(self.path, "cleaned.wav")
 
     @classmethod
-    def find_existing(cls, input_path: str, base_dir: str | None = None) -> "WorkDir | None":
+    def find_existing(cls, input_path: str, base_dir: str | None = None) -> "SessionDir | None":
         name = os.path.splitext(os.path.basename(input_path))[0]
         if base_dir is None:
             base_dir = cls._default_base()

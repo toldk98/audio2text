@@ -27,11 +27,6 @@
   "token.err_save": "Failed to save token:\n{e}",
 
   "profile.frame": "Transcription Profile",
-  "profile.diarize_mark": "👤 diarization",
-  "profile.align_mark": "🎯 alignment",
-  "profile.chunk_mark": " · 🧩 {n}min",
-  "profile.cpu_mark": " · ⚡{level}",
-
   "cpu.label": "CPU:",
   "cpu.level_high": "High",
   "cpu.level_medium": "Medium",

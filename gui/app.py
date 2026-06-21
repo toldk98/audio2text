@@ -1,4 +1,4 @@
-import io
+import logging
 import os
 import queue
 import shutil
@@ -13,10 +13,26 @@ import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 
 from profiles import list_profiles, get_profile, upsert_profile, delete_profile
-from registry import AUDIO_DIR, list_external, list_dead, add_external, remove_entry, load_registry
-from gui.token_manager import load_token, save_token, _token_modes, has_keyring, load_settings, save_settings
-from config import cpu_levels, WHISPER_CACHE_DIR, HF_HUB_DIR
+from registry import list_external, list_dead, add_external, remove_entry, load_registry
+from gui.token_manager import load_token, save_token, _token_modes, has_keyring
+from config import cpu_levels, MODEL_SIZES_MB
+from timing import TimingDB
+from split_audio import _get_duration
 from gui.lang import _, _inst
+from workdirs import WorkDirs
+from settings import load_settings, save_settings
+
+
+class _GuiLogHandler(logging.Handler):
+    def __init__(self, msg_queue: queue.Queue):
+        super().__init__()
+        self.queue = msg_queue
+        self.setLevel(logging.INFO)
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        msg = self.format(record)
+        self.queue.put(msg + "\n")
 
 
 class _ToolTip:
@@ -45,21 +61,6 @@ class _ToolTip:
             self.tip_window = None
 
 
-class _LogRedirector(io.TextIOBase):
-    def __init__(self, msg_queue: queue.Queue):
-        self.queue = msg_queue
-        self.original = sys.stdout
-        self._lock = threading.Lock()
-
-    def write(self, message):
-        with self._lock:
-            self.original.write(message)
-            self.queue.put(message)
-
-    def flush(self):
-        self.original.flush()
-
-
 def _dir_size(path: str) -> int:
     total = 0
     for dirpath, _, filenames in os.walk(path):
@@ -82,7 +83,7 @@ def _format_size(size: int) -> str:
 def _scan_model_cache() -> list[dict]:
     entries = []
 
-    whisper_dir = WHISPER_CACHE_DIR
+    whisper_dir = WorkDirs().whisper_cache
     if os.path.isdir(whisper_dir):
         for fname in os.listdir(whisper_dir):
             fpath = os.path.join(whisper_dir, fname)
@@ -95,7 +96,7 @@ def _scan_model_cache() -> list[dict]:
                             "date": time.strftime("%Y-%m-%d", time.localtime(mtime)),
                             "path": fpath})
 
-    hf_dir = HF_HUB_DIR
+    hf_dir = WorkDirs().hf_hub
     if os.path.isdir(hf_dir):
         for entry in sorted(os.listdir(hf_dir)):
             if not entry.startswith("models--"):
@@ -114,24 +115,25 @@ def _scan_model_cache() -> list[dict]:
     return entries
 
 
-_MODEL_SIZES = {
-    "tiny": "~150 MB", "base": "~300 MB", "small": "~500 MB",
-    "medium": "~1.5 GB", "large-v1": "~3 GB", "large-v2": "~3 GB",
-    "large-v3": "~3 GB", "large": "~3 GB",
-    "distil-large-v2": "~1.5 GB", "distil-large-v3": "~1.5 GB",
-    "distil-large-v3.5": "~1.5 GB",
-    "large-v3-turbo": "~3 GB", "turbo": "~3 GB",
-}
+def _fmt_model_size_gui(mb: int) -> str:
+    if mb >= 1024:
+        gb = round(mb / 1024, 1)
+        s = f"{gb:g}".rstrip("0").rstrip(".")
+        return f"~{s} GB"
+    return f"~{mb} MB"
+
+
+_MODEL_SIZES = {k: _fmt_model_size_gui(v) for k, v in MODEL_SIZES_MB.items()}
 
 
 def _model_cache_status(model_size: str) -> str:
     size_str = _MODEL_SIZES.get(model_size, "")
-    whisper_pt = os.path.join(WHISPER_CACHE_DIR, f"{model_size}.pt")
+    whisper_pt = os.path.join(WorkDirs().whisper_cache, f"{model_size}.pt")
     if os.path.isfile(whisper_pt):
         sz = os.path.getsize(whisper_pt)
         return _format_size(sz)
 
-    hf_dir = HF_HUB_DIR
+    hf_dir = WorkDirs().hf_hub
     nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
     if os.path.isdir(nd):
         return _format_size(_dir_size(nd))
@@ -178,8 +180,11 @@ class Audio2TextApp(tb.Window):
         self.minsize(640, 480)
         self._worker: threading.Thread | None = None
         self._running = False
+        self.timing_gui = TimingDB()
         self._stop_event: threading.Event | None = None
         self._log_queue: queue.Queue = queue.Queue()
+        self._hf_token_validated = False
+        self._hf_token_valid = False
 
         self._build_ui()
         self._load_token_state()
@@ -209,7 +214,7 @@ class Audio2TextApp(tb.Window):
         self._file_frame.grid(row=0, column=0, sticky=EW, pady=(10, 5), padx=10)
         self._file_frame.columnconfigure(1, weight=1)
 
-        self.file_var = tk.StringVar(value=AUDIO_DIR)
+        self.file_var = tk.StringVar(value=WorkDirs().audio_dir)
         tb.Entry(self._file_frame, textvariable=self.file_var).grid(row=0, column=1, sticky=EW, padx=(5, 5))
         self._browse_btn = tb.Button(self._file_frame, text=_("file.browse"), command=self._browse_file)
         self._browse_btn.grid(row=0, column=2)
@@ -226,9 +231,31 @@ class Audio2TextApp(tb.Window):
         self._reg_add_btn.grid(row=1, column=2, pady=(5, 0))
         self._refresh_registry_list()
 
+        # --- Profile ---
+        self._profile_frame = tb.LabelFrame(parent, text=_("profile.frame"))
+        self._profile_frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
+        self._profile_frame.columnconfigure(1, weight=1)
+
+        self.profile_var = tk.StringVar()
+        names = _profile_names()
+        self.profile_cb = tb.Combobox(self._profile_frame, textvariable=self.profile_var,
+                                      values=names, state="readonly", width=40)
+        self.profile_cb.grid(row=0, column=1, sticky=W, padx=(5, 0))
+        if names:
+            self.profile_cb.current(0)
+
+        self.profile_desc_var = tk.StringVar()
+        tb.Label(self._profile_frame, textvariable=self.profile_desc_var, foreground="gray", wraplength=600).grid(
+            row=1, column=1, sticky=W, padx=(5, 0), pady=(3, 0))
+
+        self._timing_var = tk.StringVar()
+        tb.Label(self._profile_frame, textvariable=self._timing_var, foreground="cyan",
+                 wraplength=600, font=("", 8, "")).grid(
+            row=2, column=1, sticky=W, padx=(5, 0), pady=(1, 0))
+
         # --- Token ---
         self._token_frame = tb.LabelFrame(parent, text=_("token.frame"))
-        self._token_frame.grid(row=1, column=0, sticky=EW, pady=5, padx=10)
+        self._token_frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
         self._token_frame.columnconfigure(1, weight=1)
 
         self.token_var = tk.StringVar()
@@ -246,23 +273,7 @@ class Audio2TextApp(tb.Window):
         self.token_status_var = tk.StringVar(value="")
         tb.Label(self._token_frame, textvariable=self.token_status_var, foreground="gray").grid(
             row=1, column=1, columnspan=3, sticky=W, pady=(3, 0))
-
-        # --- Profile ---
-        self._profile_frame = tb.LabelFrame(parent, text=_("profile.frame"))
-        self._profile_frame.grid(row=2, column=0, sticky=EW, pady=5, padx=10)
-        self._profile_frame.columnconfigure(1, weight=1)
-
-        self.profile_var = tk.StringVar()
-        names = _profile_names()
-        self.profile_cb = tb.Combobox(self._profile_frame, textvariable=self.profile_var,
-                                      values=names, state="readonly", width=40)
-        self.profile_cb.grid(row=0, column=1, sticky=W, padx=(5, 0))
-        if names:
-            self.profile_cb.current(0)
-
-        self.profile_desc_var = tk.StringVar()
-        tb.Label(self._profile_frame, textvariable=self.profile_desc_var, foreground="gray", wraplength=600).grid(
-            row=1, column=1, sticky=W, padx=(5, 0), pady=(3, 0))
+        self._token_frame.grid_remove()
 
         # --- CPU Load ---
         cpu_frame = tb.Frame(parent)
@@ -279,6 +290,7 @@ class Audio2TextApp(tb.Window):
         self._cpu_override_hint.pack(side=LEFT, padx=(8, 0))
 
         self.profile_cb.bind("<<ComboboxSelected>>", self._update_profile_desc)
+        self.file_var.trace_add("write", lambda *a: self._update_profile_desc())
         self._update_profile_desc()
 
         # --- Run ---
@@ -832,6 +844,7 @@ class Audio2TextApp(tb.Window):
             self.token_var.set(token)
             lbl = {"env": _("token.from_env"), "keychain": _("token.from_keychain")}.get(source, "")
             self.token_status_var.set(lbl)
+            self._hf_token_validated = False
 
         if has_keyring():
             self.token_mode_cb.set(_token_modes()["keychain"])
@@ -853,34 +866,132 @@ class Audio2TextApp(tb.Window):
         try:
             save_token(token, mode_key)
             self.token_status_var.set(_("token.saved"))
+            self._hf_token_validated = False
+            self._update_token_visibility(True)
         except Exception as e:
             messagebox.showerror(_("common.error"), _("token.err_save", e=e))
 
     # ---------- file ----------
+    def _validate_hf_token(self, token: str) -> bool:
+        if not token:
+            return False
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://huggingface.co/api/whoami-v2",
+                headers={"Authorization": f"Bearer {token}"},
+                method="GET"
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def _update_token_visibility(self, needed: bool):
+        if not needed:
+            self._token_frame.grid_remove()
+            return
+
+        token, _ = load_token()
+        if not token:
+            self._token_frame.grid()
+            return
+
+        if not self._hf_token_validated:
+            self._hf_token_valid = self._validate_hf_token(token)
+            self._hf_token_validated = True
+
+        if self._hf_token_valid:
+            self._token_frame.grid_remove()
+        else:
+            self._token_frame.grid()
+
     def _update_profile_desc(self, event=None):
         name = self.profile_var.get()
         if not name:
             self.profile_desc_var.set("")
+            self._timing_var.set("")
             return
         cfg = get_profile(name)
         if not cfg:
             self.profile_desc_var.set("")
+            self._timing_var.set("")
             return
-        parts = [cfg.get("description", "")]
-        diar = _("profile.diarize_mark") if cfg.get("diarize") else ""
-        align = _("profile.align_mark") if cfg.get("align") else ""
-        extras = " · ".join(filter(None, [align, diar]))
-        chunk = cfg.get("chunk_minutes", 0)
-        if chunk:
-            extras += _("profile.chunk_mark", n=chunk)
+        model = cfg.get("model", "large-v3")
         cpu = cfg.get("cpu_profile", "high")
         cpu_disp = _cpu_display_map()
-        if cpu != "high":
-            extras += _("profile.cpu_mark", level=cpu_disp.get(cpu, cpu))
-        if extras:
-            parts.append(f"[{extras}]")
-        self.profile_desc_var.set("  " + "  ".join(parts))
+        try:
+            import torch
+            device_str = "CUDA" if torch.cuda.is_available() else "CPU"
+        except ImportError:
+            device_str = "CPU"
+        self.profile_desc_var.set(f"  {model} · {device_str} · ⚡{cpu_disp.get(cpu, cpu)}")
         self.cpu_var.set(cpu_disp.get(cpu, cpu))
+
+        self._update_token_visibility(cfg.get("diarize", True))
+
+        # --- timing breakdown ---
+        file_path = self.file_var.get().strip()
+        if not file_path or not os.path.exists(file_path):
+            self._timing_var.set("")
+            self.run_btn.configure(text=_("run.start"))
+            return
+
+        duration = _get_duration(file_path)
+        if not duration:
+            self._timing_var.set("")
+            return
+
+        try:
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            device = "cpu"
+        model = cfg.get("model", "large-v3")
+        chunk_minutes = cfg.get("chunk_minutes", 0)
+        do_align = cfg.get("align", True)
+        do_diarize = cfg.get("diarize", True)
+        do_clean = cfg.get("clean_filter", "full") != "off"
+
+        try:
+            pred = self.timing_gui.predict(
+                model, device, duration,
+                chunk_minutes, do_align, do_diarize, do_clean
+            )
+        except Exception:
+            self._timing_var.set("")
+            self.run_btn.configure(text=_("run.start"))
+            return
+
+        def fmt(s: float) -> str:
+            if s >= 3600:
+                return f"{s/3600:.1f} год"
+            if s >= 60:
+                return f"{s/60:.0f} хв"
+            return f"{s:.0f} с"
+
+        lines = []
+        if pred["clean"]:
+            lines.append(f"  🧹 {_('timing.clean')}  ~{fmt(pred['clean'])}")
+        if pred["split"]:
+            n = pred.get("n_chunks", 1)
+            ch = f" · {n} {'чанків' if n > 1 else 'чанк'}"
+            lines.append(f"  ✂️ {_('timing.split')}  ~{fmt(pred['split'])}{ch}")
+        if pred["transcribe"]:
+            lines.append(f"  🎤 {_('timing.transcribe')}  ~{fmt(pred['transcribe'])}")
+        if pred["merge"]:
+            lines.append(f"  🧩 {_('timing.merge')}  ~{fmt(pred['merge'])}")
+        if pred["align"]:
+            lines.append(f"  📐 {_('timing.align')}  ~{fmt(pred['align'])}")
+        if pred["diarize"]:
+            lines.append(f"  👤 {_('timing.diarize')}  ~{fmt(pred['diarize'])}")
+        lines.append(f"  ─────────────────────")
+        lines.append(f"  ∑ {_('timing.total')}  ~{fmt(pred['total'])}")
+        self._timing_var.set("\n".join(lines))
+
+        # update run button
+        total_str = fmt(pred["total"])
+        self.run_btn.configure(text=f"⏵ {_('run.start')} (≈{total_str})")
 
     def _browse_file(self):
         path = filedialog.askopenfilename(
@@ -937,11 +1048,6 @@ class Audio2TextApp(tb.Window):
             messagebox.showwarning(_("common.error"), _("run.err_no_file"))
             return
 
-        token = self._get_token()
-        if not token:
-            messagebox.showwarning(_("common.error"), _("run.err_no_token"))
-            return
-
         profile_name = self.profile_var.get()
         if not profile_name:
             messagebox.showwarning(_("common.error"), _("run.err_no_profile"))
@@ -950,6 +1056,13 @@ class Audio2TextApp(tb.Window):
         cfg = get_profile(profile_name)
         if not cfg:
             messagebox.showwarning(_("common.error"), _("run.err_profile_not_found", name=profile_name))
+            return
+
+        # only require HF token when diarization is enabled
+        self._hf_token_validated = False
+        token = self._get_token()
+        if cfg.get("diarize", True) and not token:
+            messagebox.showwarning(_("common.error"), _("run.err_no_token"))
             return
 
         self._running = True
@@ -964,7 +1077,7 @@ class Audio2TextApp(tb.Window):
 
         self._worker = threading.Thread(
             target=self._transcribe_worker,
-            args=(file_path, cfg, token, self._stop_event), daemon=True)
+            args=(file_path, cfg, token or "", self._stop_event), daemon=True)
         self._worker.start()
         self.after(200, self._poll_worker)
 
@@ -992,9 +1105,9 @@ class Audio2TextApp(tb.Window):
         from whisper_offline import (WhisperTranscriber, DownloadCancelledError,
                                      TranscriptionCancelledError)
 
-        redirector = _LogRedirector(self._log_queue)
-        old_stdout = sys.stdout
-        sys.stdout = redirector
+        gui_handler = _GuiLogHandler(self._log_queue)
+        root_logger = logging.getLogger("audio2text")
+        root_logger.addHandler(gui_handler)
         try:
             transcriber = WhisperTranscriber(
                 hf_token=token,
@@ -1018,11 +1131,11 @@ class Audio2TextApp(tb.Window):
         except Exception as e:
             self._log_queue.put(_("run.log_error", e=e))
         finally:
-            sys.stdout = old_stdout
+            root_logger.removeHandler(gui_handler)
             self._running = False
             self.after(0, self._on_done)
 
-    def _drain_log(self):
+    def _drain_log_now(self):
         while True:
             try:
                 msg = self._log_queue.get_nowait()
@@ -1036,6 +1149,9 @@ class Audio2TextApp(tb.Window):
             self.log_text.insert(tk.END, msg)
             self.log_text.see(tk.END)
             self.log_text.configure(state=tk.DISABLED)
+
+    def _drain_log(self):
+        self._drain_log_now()
         self.after(200, self._drain_log)
 
     def _poll_worker(self):
@@ -1043,6 +1159,7 @@ class Audio2TextApp(tb.Window):
             self.after(200, self._poll_worker)
 
     def _on_done(self):
+        self._drain_log_now()
         self.run_btn.configure(state=NORMAL, text=_("run.start"),
                                bootstyle="success", command=self._run)
         self.progress.stop()

@@ -1,8 +1,10 @@
 import sys
 
 from logger import setup_logging
+from workdirs import WorkDirs
 
 if __name__ == "__main__":
+    WorkDirs().ensure_all()
     setup_logging()
 
     if len(sys.argv) > 1:

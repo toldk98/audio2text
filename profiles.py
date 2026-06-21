@@ -1,12 +1,12 @@
 import os
-import platformdirs
+from workdirs import WorkDirs
 
 try:
     import yaml
 except ImportError:
     yaml = None
 
-USER_PROFILES_PATH = os.path.join(platformdirs.user_config_dir("audio2text"), "profiles.yaml")
+USER_PROFILES_PATH = WorkDirs().profiles_path
 
 EMBEDDED_PROFILES = {
     "file": {

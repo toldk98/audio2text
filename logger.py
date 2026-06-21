@@ -3,14 +3,12 @@ import os
 import subprocess
 import sys
 from logging.handlers import RotatingFileHandler
+from workdirs import WorkDirs
 
-import platformdirs
-
-LOG_DIR = platformdirs.user_log_dir("audio2text")
 _LOG_CONFIGURED = False
 
 
-class _StdoutHandler(logging.Handler):
+class _TerminalHandler(logging.Handler):
     def __init__(self):
         super().__init__()
         self.terminator = "\n"
@@ -18,8 +16,10 @@ class _StdoutHandler(logging.Handler):
     def emit(self, record):
         msg = self.format(record)
         try:
-            sys.stdout.write(msg + self.terminator)
-            sys.stdout.flush()
+            out = sys.__stdout__
+            if out is not None:
+                out.write(msg + self.terminator)
+                out.flush()
         except Exception:
             self.handleError(record)
 
@@ -30,13 +30,14 @@ def setup_logging():
         return
     _LOG_CONFIGURED = True
 
-    os.makedirs(LOG_DIR, exist_ok=True)
+    log_dir = WorkDirs().log_dir
+    os.makedirs(log_dir, exist_ok=True)
 
     logger = logging.getLogger("audio2text")
     logger.setLevel(logging.DEBUG)
 
     fh = RotatingFileHandler(
-        os.path.join(LOG_DIR, "audio2text.log"),
+        os.path.join(log_dir, "audio2text.log"),
         maxBytes=5 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",
@@ -47,7 +48,7 @@ def setup_logging():
     ))
     logger.addHandler(fh)
 
-    sh = _StdoutHandler()
+    sh = _TerminalHandler()
     sh.setLevel(logging.INFO)
     sh.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(sh)

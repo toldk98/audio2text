@@ -5,14 +5,15 @@ import shutil
 import time
 from dotenv import load_dotenv
 
-from config import model_name_list, chunk_options, WHISPER_CACHE_DIR, HF_HUB_DIR
+from config import model_name_list, chunk_options
 from whisper_offline import WhisperTranscriber, DownloadCancelledError
 from whisper_realtime import WhisperRealtimeTranscriber
+from workdirs import WorkDirs
 
 load_dotenv()
 
-_WHISPER_CACHE = WHISPER_CACHE_DIR
-_HF_CACHE = HF_HUB_DIR
+_WHISPER_CACHE = WorkDirs().whisper_cache
+_HF_CACHE = WorkDirs().hf_hub
 
 _PROFILE_KEYS = {
     "model": "model_name",

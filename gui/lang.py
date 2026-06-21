@@ -2,8 +2,9 @@ import json
 import os
 import threading
 
+from settings import load_settings
+
 LOCALES_DIR = os.path.join(os.path.dirname(__file__), "locales")
-_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), ".uilang")
 _FALLBACK_LANG = "en"
 
 
@@ -40,18 +41,7 @@ class Lang:
             return json.load(f)
 
     def _restore(self) -> str:
-        try:
-            with open(_SETTINGS_FILE) as f:
-                return f.read().strip()
-        except (OSError, ValueError):
-            return "uk"
-
-    def _persist(self):
-        try:
-            with open(_SETTINGS_FILE, "w") as f:
-                f.write(self._lang)
-        except OSError:
-            pass
+        return load_settings().get("lang", "uk")
 
     @property
     def current(self) -> str:
@@ -60,7 +50,6 @@ class Lang:
     def switch_to(self, lang: str):
         self._lang = lang
         self._load(lang)
-        self._persist()
 
     def get(self, key: str, **kwargs) -> str:
         val = self._data.get(key) or self._fallback.get(key)

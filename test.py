@@ -30,17 +30,19 @@ def _section(name):
 def test_registry():
     _section("Registry")
 
-    from registry import add_external, list_external, list_dead, remove_entry, load_registry, REGISTRY_PATH
+    from registry import add_external, list_external, list_dead, remove_entry, load_registry
+    from workdirs import WorkDirs
+    registry_path = WorkDirs().registry_path
 
     # backup real registry
     backup = None
-    if os.path.exists(REGISTRY_PATH):
-        backup = Path(REGISTRY_PATH).read_text()
+    if os.path.exists(registry_path):
+        backup = Path(registry_path).read_text()
 
     try:
         # clean slate
-        if os.path.exists(REGISTRY_PATH):
-            os.remove(REGISTRY_PATH)
+        if os.path.exists(registry_path):
+            os.remove(registry_path)
 
         tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tf.close()
@@ -76,9 +78,9 @@ def test_registry():
 
     finally:
         if backup is not None:
-            Path(REGISTRY_PATH).write_text(backup)
-        elif os.path.exists(REGISTRY_PATH):
-            os.remove(REGISTRY_PATH)
+            Path(registry_path).write_text(backup)
+        elif os.path.exists(registry_path):
+            os.remove(registry_path)
 
 # ---------------------------------------------------------------------------
 # Profiles
@@ -214,16 +216,18 @@ def test_token_manager():
         mock_kr_ask.set_password.assert_not_called()
         _check(True, "save_token mode=ask no keyring call")
 
+    # --- settings.py ---
+    from workdirs import WorkDirs
+
     # load_settings missing file
-    orig = tm.SETTINGS_PATH
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         p = f.name
     os.remove(p)
     try:
-        tm.SETTINGS_PATH = p
-        _check(tm.load_settings() == {}, "load_settings missing → {}")
+        with mock.patch.object(WorkDirs, "settings_path", new_callable=mock.PropertyMock, return_value=p):
+            from settings import load_settings, save_settings
+            _check(load_settings() == {}, "load_settings missing → {}")
     finally:
-        tm.SETTINGS_PATH = orig
         os.remove(p) if os.path.exists(p) else None
 
     # load_settings valid file
@@ -231,35 +235,33 @@ def test_token_manager():
         json.dump({"theme": "darkly"}, f)
         p = f.name
     try:
-        tm.SETTINGS_PATH = p
-        s = tm.load_settings()
-        _check(s.get("theme") == "darkly", "load_settings valid JSON")
+        with mock.patch.object(WorkDirs, "settings_path", new_callable=mock.PropertyMock, return_value=p):
+            s = load_settings()
+            _check(s.get("theme") == "darkly", "load_settings valid JSON")
     finally:
-        tm.SETTINGS_PATH = orig
+        os.remove(p) if os.path.exists(p) else None
 
     # load_settings corrupted file
     Path(p).write_text("{corrupted")
-    tm.SETTINGS_PATH = p
     try:
-        _check(tm.load_settings() == {}, "load_settings corrupted → {}")
+        with mock.patch.object(WorkDirs, "settings_path", new_callable=mock.PropertyMock, return_value=p):
+            _check(load_settings() == {}, "load_settings corrupted → {}")
     finally:
-        tm.SETTINGS_PATH = orig
-        os.remove(p)
+        os.remove(p) if os.path.exists(p) else None
 
     # save_settings creates file and merges
     with tempfile.TemporaryDirectory() as tmp:
         p2 = os.path.join(tmp, "settings.json")
-        tm.SETTINGS_PATH = p2
-        tm.save_settings({"theme": "solar"})
-        _check(os.path.exists(p2), "save_settings creates file")
-        data = json.loads(Path(p2).read_text())
-        _check(data.get("theme") == "solar", "save_settings writes data")
+        with mock.patch.object(WorkDirs, "settings_path", new_callable=mock.PropertyMock, return_value=p2):
+            save_settings({"theme": "solar"})
+            _check(os.path.exists(p2), "save_settings creates file")
+            data = json.loads(Path(p2).read_text())
+            _check(data.get("theme") == "solar", "save_settings writes data")
 
-        tm.save_settings({"language": "uk"})
-        data = json.loads(Path(p2).read_text())
-        _check(data.get("theme") == "solar", "save_settings merge keeps old key")
-        _check(data.get("language") == "uk", "save_settings merge adds new key")
-    tm.SETTINGS_PATH = orig
+            save_settings({"language": "uk"})
+            data = json.loads(Path(p2).read_text())
+            _check(data.get("theme") == "solar", "save_settings merge keeps old key")
+            _check(data.get("language") == "uk", "save_settings merge adds new key")
 
 
 # ---------------------------------------------------------------------------
@@ -608,7 +610,7 @@ def test_timing_db():
     _section("TimingDB")
 
     import timing
-    from timing import TimingDB, CHUNK_DEFAULTS
+    from timing import TimingDB, CHUNK_DEFAULTS, STAGE_DEFAULTS
 
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         temp_path = f.name
@@ -624,7 +626,8 @@ def test_timing_db():
         _check(val == CHUNK_DEFAULTS[("tiny", "cpu")],
                f"chunk default tiny/cpu = {val}")
         val = db.get("large-v3", "cpu", "align")
-        _check(val == 60.0, f"align default large-v3/cpu = {val}")
+        _check(val == STAGE_DEFAULTS["align"]["cpu"],
+               f"align default large-v3/cpu = {val}")
 
         # update() stores running average
         db.update("tiny", "cpu", "chunk", 10.0)
@@ -638,24 +641,48 @@ def test_timing_db():
         _check("tiny_cpu" in raw, "key exists after save")
         _check(raw["tiny_cpu"]["chunk"] == 15.0, "saved running avg")
 
-        # predict() with known params
+        # predict() with known params (chunked)
         pred = db.predict("tiny", "cpu", audio_duration_sec=600,
                           chunk_minutes=10, do_align=True, do_diarize=False)
         _check(pred["n_chunks"] == 1, "600s/10min = 1 chunk")
         _check(pred["clean"] > 0, "clean time > 0")
+        _check(pred["split"] > 0, "split time > 0")
         _check(pred["transcribe"] > 0, "transcribe time > 0")
+        _check(pred["merge"] > 0, "merge time > 0")
         _check(pred["align"] > 0, "align time > 0")
         _check(pred["diarize"] == 0, "diarize = 0 when disabled")
-        _check(pred["total"] == pred["clean"] + pred["transcribe"] + pred["align"],
-               "total = clean + transcribe + align")
+        _check(pred["total"] == pred["clean"] + pred["split"] + pred["transcribe"] +
+               pred["merge"] + pred["align"],
+               "total = clean + split + transcribe + merge + align")
 
         # predict with multiple chunks
         pred2 = db.predict("tiny", "cpu", 1800, 10, False, False)
         _check(pred2["n_chunks"] == 3, "1800s/10min = 3 chunks")
 
-        # predict without chunking
+        # predict without chunking (no split/merge)
         pred3 = db.predict("tiny", "cpu", 300, 0, False, False)
         _check(pred3["n_chunks"] == 1, "chunk_minutes=0 → 1 chunk")
+        _check(pred3["split"] == 0, "no split when not chunked")
+        _check(pred3["merge"] == 0, "no merge when not chunked")
+        _check(pred3["total"] == pred3["clean"] + pred3["transcribe"],
+               "non-chunked total = clean + transcribe")
+
+        # predict with do_clean=False
+        pred4 = db.predict("tiny", "cpu", 300, 10, False, False, do_clean=False)
+        _check(pred4["clean"] == 0, "do_clean=False → clean = 0")
+        _check(pred4["total"] == pred4["split"] + pred4["transcribe"] + pred4["merge"],
+               "do_clean=False total = split + transcribe + merge")
+
+        # RTF defaults scale with duration
+        p5 = db.predict("tiny", "cpu", 600, 0, True, True, True)
+        _check(p5["clean"] == 0.2 * 600, "clean RTF default = 0.2×duration")
+        _check(p5["align"] == 6.0 * 600, "align RTF default = 6.0×duration")
+        _check(p5["diarize"] == 2.5 * 600, "diarize RTF default = 2.5×duration")
+
+        # update stores RTF, get scales by new duration
+        db.update("tiny", "cpu", "align", 300.0, duration=600)
+        _check(db.get("tiny", "cpu", "align", 1200) == 600.0,
+               "stored RTF × 1200 = align 600s")
 
     finally:
         timing.TIMINGS_PATH = orig_path
@@ -663,24 +690,24 @@ def test_timing_db():
 
 
 # ---------------------------------------------------------------------------
-# WorkDir
-# ---------------------------------------------------------------------------
-def test_workdir():
-    _section("WorkDir")
+# SessionDir
 
-    from workdir import WorkDir
+def test_workdir():
+    _section("SessionDir")
+
+    from session_dir import SessionDir
 
     with tempfile.TemporaryDirectory() as tmp:
-        # create work dir
+        # create session dir
         input_path = os.path.join(tmp, "test_audio.m4a")
         Path(input_path).touch()
-        wd = WorkDir(input_path, base_dir=tmp)
-        _check(os.path.isdir(wd.path), "workdir path created")
+        wd = SessionDir(input_path, base_dir=tmp)
+        _check(os.path.isdir(wd.path), "session dir path created")
         _check(wd.session_id.startswith("test_audio_"), "session_id prefix")
 
         # find_existing returns it
-        found = WorkDir.find_existing(input_path, base_dir=tmp)
-        _check(found is not None, "find_existing finds created workdir")
+        found = SessionDir.find_existing(input_path, base_dir=tmp)
+        _check(found is not None, "find_existing finds created session dir")
         _check(found.session_id == wd.session_id, "same session_id")
 
         # save / load json
@@ -692,28 +719,24 @@ def test_workdir():
         # load_json nonexistent → None
         _check(wd.load_json("nonexistent.json") is None, "load_json missing → None")
 
-        # transcribed_chunk_keys
-        keys = wd.transcribed_chunk_keys()
-        _check(keys == set(), "no chunks yet → empty set")
+        # save / load / list transcribed chunks
+        wd.save_transcribed_chunk("chunk_0", [{"start": 0.0, "end": 1.0}])
+        wd.save_transcribed_chunk("chunk_1", [{"start": 1.0, "end": 2.0}])
+        _check(set(wd.transcribed_chunk_keys()) == {"chunk_0", "chunk_1"},
+               "transcribed_chunk_keys returns saved chunks")
 
-        chunks_dir = wd.ensure_chunks_dir()
-        _check(os.path.isdir(chunks_dir), "chunks dir created")
-
-        transcribed_dir = os.path.join(wd.path, "transcribed")
-        os.makedirs(transcribed_dir, exist_ok=True)
-
-        wd.save_transcribed_chunk("chunk_0000", [{"seg": 1}])
-        wd.save_transcribed_chunk("chunk_0001", [{"seg": 2}])
-        keys = wd.transcribed_chunk_keys()
-        _check(keys == {"chunk_0000", "chunk_0001"}, "transcribed_chunk_keys")
+        # ensure_chunks_dir
+        chunks = wd.ensure_chunks_dir()
+        _check(os.path.isdir(chunks), "chunks dir created")
+        _check(chunks.endswith("chunks"), "chunks dir name")
 
         # cleanup
         wd.cleanup()
-        _check(not os.path.exists(wd.path), "workdir cleaned up")
+        _check(not os.path.exists(wd.path), "session dir cleaned up")
 
-    # find_existing with no base dir → None
-    none_found = WorkDir.find_existing("/nonexistent/path/audio.m4a", base_dir=tmp)
-    _check(none_found is None, "find_existing no match → None")
+        # find_existing on nonexistent
+        none_found = SessionDir.find_existing("/nonexistent/path/audio.m4a", base_dir=tmp)
+        _check(none_found is None, "find_existing no match → None")
 
 
 # ---------------------------------------------------------------------------
@@ -811,7 +834,7 @@ def test_exception_classes():
 def test_timing_defaults_consistency():
     _section("Timing defaults consistency")
 
-    from timing import CHUNK_DEFAULTS, STAGE_DEFAULTS
+    from timing import CHUNK_DEFAULTS, STAGE_DEFAULTS, _RTF_STAGES
 
     # every model that has cpu default should also have cuda
     cpu_models = {m for (m, d) in CHUNK_DEFAULTS if d == "cpu"}
@@ -820,9 +843,17 @@ def test_timing_defaults_consistency():
            f"all cpu models also have cuda default: {cpu_models - cuda_models}")
 
     # all stage defaults have both cpu and cuda
+    stage_names = {"clean", "split", "merge", "align", "diarize"}
+    _check(set(STAGE_DEFAULTS) == stage_names,
+           f"STAGE_DEFAULTS has all stages: {set(STAGE_DEFAULTS) ^ stage_names}")
     for stage, devices in STAGE_DEFAULTS.items():
         _check("cpu" in devices and "cuda" in devices,
                f"stage '{stage}' has cpu and cuda")
+
+    # RTF stages have cpu < cuda (cpu slower → higher RTF)
+    for stage in _RTF_STAGES:
+        _check(STAGE_DEFAULTS[stage]["cpu"] > STAGE_DEFAULTS[stage]["cuda"],
+               f"RTF stage '{stage}': cpu({STAGE_DEFAULTS[stage]['cpu']}) > cuda({STAGE_DEFAULTS[stage]['cuda']})")
 
     # defaults are positive
     for (m, d), val in CHUNK_DEFAULTS.items():
@@ -834,6 +865,8 @@ def test_timing_defaults_consistency():
     for duration in [0, 60, 600, 3600]:
         p = db.predict("tiny", "cpu", duration, 0, False, False)
         _check(p["n_chunks"] == 1, f"chunk_minutes=0 → 1 chunk for {duration}s")
+        _check("split" in p, "predict has split key")
+        _check("merge" in p, "predict has merge key")
 
 
 # ---------------------------------------------------------------------------
@@ -911,7 +944,8 @@ def test_check_resources():
     _section("_check_resources")
 
     _mock_heavy_imports()
-    from whisper_offline import _check_resources, MODEL_RESOURCE_MB
+    from whisper_offline import _check_resources
+    from config import MODEL_SIZES_MB
 
     mock_mem = mock.MagicMock()
     mock_disk = mock.MagicMock()
@@ -937,7 +971,7 @@ def test_check_resources():
         _check(any("⚠️" in x for x in w), "RAM warning has ⚠️")
 
     # 3. Moderate RAM (1×…2× need) → weaker warning
-    need_mb = MODEL_RESOURCE_MB["large-v3"] + 300 + 200 + 200
+    need_mb = MODEL_SIZES_MB["large-v3"] + 300 + 200 + 200
     mock_mem.available = int(need_mb * 1.5 * 1024**2)
     with mock.patch("whisper_offline.psutil.virtual_memory", return_value=mock_mem), \
          mock.patch("whisper_offline.psutil.disk_usage", return_value=mock_disk), \
@@ -963,10 +997,8 @@ def test_check_resources():
         w, e = _check_resources("large-v3", False, False)
         _check(len(e) == 0, "low disk but cached → no errors")
 
-    # 6. MODEL_RESOURCE_MB completeness vs config
-    from config import model_name_list
-    for m in model_name_list:
-        _check(m in MODEL_RESOURCE_MB, f"MODEL_RESOURCE_MB has '{m}'")
+    for m in MODEL_SIZES_MB:
+        _check(m in MODEL_SIZES_MB, f"MODEL_SIZES_MB has '{m}'")
 
 
 # ---------------------------------------------------------------------------

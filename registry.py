@@ -1,11 +1,10 @@
 import json
 import os
 from datetime import datetime
+from workdirs import WorkDirs
 
-import platformdirs
-
-AUDIO_DIR = platformdirs.user_data_dir("audio2text")
-REGISTRY_PATH = os.path.join(AUDIO_DIR, "external_registry.json")
+AUDIO_DIR = WorkDirs().audio_dir
+REGISTRY_PATH = WorkDirs().registry_path
 SUPPORTED_EXT = {".m4a", ".wav", ".mp3", ".ogg"}
 
 

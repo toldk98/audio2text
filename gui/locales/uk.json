@@ -27,11 +27,6 @@
   "token.err_save": "Не вдалося зберегти токен:\n{e}",
 
   "profile.frame": "Профіль транскрипції",
-  "profile.diarize_mark": "👤 діаризація",
-  "profile.align_mark": "🎯 вирівнювання",
-  "profile.chunk_mark": " · 🧩 {n}хв",
-  "profile.cpu_mark": " · ⚡{level}",
-
   "cpu.label": "CPU:",
   "cpu.level_high": "Високе",
   "cpu.level_medium": "Середнє",
@@ -159,5 +154,13 @@
   "lang.zh": "Китайська",
   "lang.ko": "Корейська",
   "lang.ar": "Арабська",
-  "lang.tr": "Турецька"
+  "lang.tr": "Турецька",
+
+  "timing.clean": "Очищення аудіо",
+  "timing.split": "Розбиття на частини",
+  "timing.transcribe": "Транскрипція",
+  "timing.merge": "Зведення сегментів",
+  "timing.align": "Вирівнювання",
+  "timing.diarize": "Діаризація",
+  "timing.total": "Загалом"
 }

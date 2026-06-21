@@ -12,7 +12,8 @@ from gui.token_manager import load_token
 
 from config import language_list, chunk_options
 from profiles import list_profiles
-from registry import add_external, list_external, list_dead, remove_entry, AUDIO_DIR
+from registry import add_external, list_external, list_dead, remove_entry
+from workdirs import WorkDirs
 from whisper_offline import WhisperTranscriber, DownloadCancelledError
 from whisper_realtime import WhisperRealtimeTranscriber
 
@@ -71,10 +72,11 @@ def _scan_audio_dir(audio_dir: str) -> list[str]:
 
 
 def _fzf_select_audio() -> str | None:
-    local_files = _scan_audio_dir(AUDIO_DIR)
+    audio_dir = WorkDirs().audio_dir
+    local_files = _scan_audio_dir(audio_dir)
 
     legacy_audio = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Audio")
-    if legacy_audio != AUDIO_DIR and os.path.isdir(legacy_audio):
+    if legacy_audio != audio_dir and os.path.isdir(legacy_audio):
         local_files.extend(_scan_audio_dir(legacy_audio))
 
     external = list_external()

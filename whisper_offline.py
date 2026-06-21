@@ -10,8 +10,9 @@ from whisperx.diarize import DiarizationPipeline
 from split_audio import split_audio, dedup_segments, _get_duration
 from logger import get_logger
 from timing import TimingDB
-from workdir import WorkDir
-from config import WHISPER_CACHE_DIR, HF_HUB_DIR
+from session_dir import SessionDir
+from workdirs import WorkDirs
+from config import MODEL_SIZES_MB
 
 logger = get_logger(__name__)
 
@@ -19,15 +20,6 @@ try:
     import psutil
 except ImportError:
     psutil = None
-
-MODEL_RESOURCE_MB = {
-    "tiny": 150, "base": 300, "small": 500,
-    "medium": 1500, "large-v1": 3000, "large-v2": 3000,
-    "large-v3": 3000, "large": 3000,
-    "distil-large-v2": 1500, "distil-large-v3": 1500,
-    "distil-large-v3.5": 1500,
-    "large-v3-turbo": 3000, "turbo": 3000,
-}
 
 
 def _check_resources(model_size: str, do_align: bool, do_diarize: bool) -> tuple[list[str], list[str]]:
@@ -37,7 +29,7 @@ def _check_resources(model_size: str, do_align: bool, do_diarize: bool) -> tuple
     if psutil is None:
         return warnings, errors
 
-    need_mb = MODEL_RESOURCE_MB.get(model_size, 1000)
+    need_mb = MODEL_SIZES_MB.get(model_size, 1000)
 
     # 1. RAM (warnings only, never blocks)
     free_mb = psutil.virtual_memory().available / 1024 / 1024
@@ -55,7 +47,7 @@ def _check_resources(model_size: str, do_align: bool, do_diarize: bool) -> tuple
 
     # 2. Disk for model download (error — blocks if not cached AND full)
     if not _model_cached(model_size):
-        candidates = [HF_HUB_DIR, WHISPER_CACHE_DIR, os.path.expanduser("~")]
+        candidates = [WorkDirs().hf_hub, WorkDirs().whisper_cache, os.path.expanduser("~")]
         cache_dir = next((d for d in candidates if os.path.exists(d)),
                          os.path.expanduser("~"))
         free_disk_mb = psutil.disk_usage(cache_dir).free / 1024 / 1024
@@ -142,10 +134,10 @@ class TranscriptionCancelledError(Exception):
 
 
 def _model_cached(model_size: str) -> bool:
-    if os.path.isfile(os.path.join(WHISPER_CACHE_DIR, f"{model_size}.pt")):
+    if os.path.isfile(os.path.join(WorkDirs().whisper_cache, f"{model_size}.pt")):
         return True
 
-    hf_dir = HF_HUB_DIR
+    hf_dir = WorkDirs().hf_hub
     # Non-distil models: faster-whisper-{model_size}
     nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
     if os.path.isdir(nd):
@@ -159,19 +151,20 @@ def _model_cached(model_size: str) -> bool:
     return False
 
 
+def _fmt_model_size(mb: int) -> str:
+    if mb >= 1024:
+        gb = round(mb / 1024, 1)
+        s = f"{gb:g}".rstrip("0").rstrip(".")
+        return f"~{s} GB"
+    return f"~{mb} MB"
+
+
 def _confirm_download(model_size: str, do_align: bool, do_diarize: bool, allow_download: bool = True):
     if _model_cached(model_size):
         return
 
-    sizes = {
-        "tiny": "~150 MB", "base": "~300 MB", "small": "~500 MB",
-        "medium": "~1.5 GB", "large-v1": "~3 GB", "large-v2": "~3 GB",
-        "large-v3": "~3 GB", "large": "~3 GB",
-        "distil-large-v2": "~1.5 GB", "distil-large-v3": "~1.5 GB",
-        "distil-large-v3.5": "~1.5 GB",
-        "large-v3-turbo": "~3 GB", "turbo": "~3 GB",
-    }
-    size_str = sizes.get(model_size, "~1 GB")
+    mb = MODEL_SIZES_MB.get(model_size, 1000)
+    size_str = _fmt_model_size(mb)
 
     logger.warning(f"\n⚠️ Модель '{model_size}' ({size_str}) не знайдено в кеші.")
     logger.info(f"   Потрібно завантажити {size_str} з інтернету (одноразово).")
@@ -241,8 +234,15 @@ class WhisperTranscriber:
                 logger.error(e)
             raise DownloadCancelledError("\n".join(errors))
 
-        _confirm_download(self.model_size, self.do_align, self.do_diarize, self.allow_download)
+    def _elapsed(self, message: str) -> str:
+        elapsed = time.time() - self.time_process
+        return f"[TIME] {message}: {elapsed:.2f} с"
 
+    def _ensure_model_loaded(self):
+        if hasattr(self, "model"):
+            return
+        _confirm_download(self.model_size, self.do_align, self.do_diarize, self.allow_download)
+        logger.info(f"[INFO] Завантаження моделі '{self.model_size}'...")
         self.model = whisperx.load_model(
             self.model_size,
             device=self.device,
@@ -250,10 +250,6 @@ class WhisperTranscriber:
             compute_type=self.compute_type,
         )
         logger.info(self._elapsed("Ініціалізація моделі завершена"))
-
-    def _elapsed(self, message: str) -> str:
-        elapsed = time.time() - self.time_process
-        return f"[TIME] {message}: {elapsed:.2f} с"
 
     def _clean_audio(self, input_audio: str) -> str:
         clean_path = self.work_dir.cleaned_audio
@@ -308,26 +304,28 @@ class WhisperTranscriber:
         with open(output_txt, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-    def _align_and_diarize(self, audio, segments, output_txt):
+    def _align_and_diarize(self, audio, segments, output_txt, duration: float = 0):
         result = None
 
         if self.do_align:
-            logger.info(f"[INFO] Вирівнювання тексту...")
+            align_pred = self.timing.get(self.model_size, self.device, "align", duration)
+            logger.info(f"[ETA] Вирівнювання: ~{align_pred:.0f} с")
             t1 = time.time()
             model_a, metadata = whisperx.load_align_model(
                 language_code=self.language, device=self.device
             )
             result = whisperx.align(segments, model_a, metadata, audio, self.device)
             align_elapsed = time.time() - t1
-            self.timing.update(self.model_size, self.device, "align", align_elapsed)
-            logger.info(f"[TIME] Вирівнювання: {align_elapsed:.2f} с")
+            self.timing.update(self.model_size, self.device, "align", align_elapsed, duration)
+            logger.info(f"[DONE] Вирівнювання: {align_elapsed:.0f} с")
         else:
             result = {"segments": segments}
 
         if self.do_diarize:
             if self.stop_event.is_set():
                 raise TranscriptionCancelledError()
-            logger.info(f"[INFO] Виконується діаризація...")
+            diar_pred = self.timing.get(self.model_size, self.device, "diarize", duration)
+            logger.info(f"[ETA] Діаризація: ~{diar_pred:.0f} с")
             t2 = time.time()
             diarize_model = DiarizationPipeline(
                 use_auth_token=self.hf_token, device=self.device
@@ -335,20 +333,21 @@ class WhisperTranscriber:
             diarize_segments = diarize_model(audio)
             result = whisperx.assign_word_speakers(diarize_segments, result)
             diarize_elapsed = time.time() - t2
-            self.timing.update(self.model_size, self.device, "diarize", diarize_elapsed)
-            logger.info(f"[TIME] Діаризація: {diarize_elapsed:.2f} с")
+            self.timing.update(self.model_size, self.device, "diarize", diarize_elapsed, duration)
+            logger.info(f"[DONE] Діаризація: {diarize_elapsed:.0f} с")
 
         self._write_result(result, output_txt)
         logger.info(f"[DONE] Текст збережено у: {output_txt}")
         return result
 
-    def _transcribe_chunk(self, chunk_path: str, start_time: float) -> list[dict]:
+    def _transcribe_chunk(self, chunk_path: str, start_time: float) -> tuple[list[dict], float]:
+        t0 = time.time()
         audio = whisperx.load_audio(chunk_path)
         result = self.model.transcribe(audio)
         for seg in result["segments"]:
             seg["start"] += start_time
             seg["end"] += start_time
-        return result["segments"]
+        return result["segments"], time.time() - t0
 
     def _load_or_transcribe_chunks(self, chunks: list[tuple[str, float]]) -> list[dict]:
         done_keys = self.work_dir.transcribed_chunk_keys()
@@ -374,7 +373,7 @@ class WhisperTranscriber:
 
             t_start = time.time()
             completed = 0
-            chunk_times = []
+            recent_times = []
 
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 fut_map = {executor.submit(self._transcribe_chunk, p, s): (p, s) for p, s in new_chunks}
@@ -383,82 +382,106 @@ class WhisperTranscriber:
                         logger.info(f"[INFO] Скасовано: оброблено {completed}/{len(new_chunks)} чанків")
                         break
                     p, s = fut_map[fut]
-                    t_chunk = time.time()
-                    segs = fut.result()
-                    chunk_times.append(time.time() - t_chunk)
+                    segs, elapsed = fut.result()
+                    recent_times.append(elapsed)
                     key = os.path.splitext(os.path.basename(p))[0]
                     self.work_dir.save_transcribed_chunk(key, segs)
                     all_segments.extend(segs)
                     completed += 1
-                    if completed % 2 == 0 or completed == len(new_chunks):
-                        avg = sum(chunk_times) / len(chunk_times)
-                        remaining = avg * (len(new_chunks) - completed)
-                        logger.info(f"[ETA] Чанк {completed}/{len(new_chunks)} · залишилось ~{remaining:.0f} с")
-                        if self.progress_callback:
-                            self.progress_callback(completed, len(new_chunks), remaining)
 
-            if chunk_times:
-                avg_chunk = sum(chunk_times) / len(chunk_times)
+                    window = recent_times[-3:]
+                    avg = sum(window) / len(window)
+                    remaining = avg * (len(new_chunks) - completed)
+                    elapsed_total = time.time() - t_start
+                    logger.info(
+                        f"[ETA] Транскрипція: {completed}/{len(new_chunks)} · "
+                        f"залишилось ~{remaining:.0f} с · минуло {elapsed_total:.0f} с"
+                    )
+                    if self.progress_callback:
+                        self.progress_callback(completed, len(new_chunks), remaining)
+
+            if recent_times:
+                avg_chunk = sum(recent_times) / len(recent_times)
                 self.timing.update(self.model_size, self.device, "chunk", avg_chunk)
 
         return all_segments
 
-    def transcribe_chunked(self, input_audio: str, output_txt: str = None):
+    def _setup(self, input_audio: str, output_txt: str | None) -> tuple[str, str, float, float]:
         if not os.path.exists(input_audio):
             raise FileNotFoundError(f"Файл '{input_audio}' не знайдено")
 
         self._original_path = input_audio
-        existing = WorkDir.find_existing(input_audio)
+        existing = SessionDir.find_existing(input_audio)
         if existing:
             logger.info(f"[INFO] Resume: знайдено робочу директорію {existing.session_id}")
             self.work_dir = existing
         else:
-            self.work_dir = WorkDir(input_audio)
+            self.work_dir = SessionDir(input_audio)
+
         start_total = time.time()
+        logger.info(f"[INFO] Обробка файлу: {input_audio}")
 
+        for w in _check_output_disk(self.work_dir.path, input_audio):
+            logger.warning(w)
+
+        duration = _get_duration(input_audio) or 0
+        clean_pred = self.timing.get(self.model_size, self.device, "clean", duration)
+        logger.info(f"[ETA] Очищення аудіо: ~{clean_pred:.0f} с")
+        t_stage = time.time()
+        cleaned = self._clean_audio(input_audio)
+        clean_elapsed = time.time() - t_stage
+        self.timing.update(self.model_size, self.device, "clean", clean_elapsed, duration)
+        logger.info(f"[DONE] Очищення аудіо: {clean_elapsed:.0f} с")
+
+        if self.stop_event.is_set():
+            raise TranscriptionCancelledError()
+
+        if not output_txt:
+            base_path = os.path.splitext(self._original_path)[0]
+            output_txt = f"{base_path}_transcribed.txt"
+
+        return output_txt, cleaned, start_total, duration
+
+    def _teardown(self, start_total: float, output_txt: str) -> str:
+        total_time = time.time() - start_total
+        logger.info(f"[DONE] Загальний час обробки: {total_time / 60:.1f} хв ({total_time:.1f} с)")
+        self.work_dir.cleanup()
+        logger.info(self._elapsed("Обробку завершено"))
+        return output_txt
+
+    def _transcribe_chunked(self, input_audio: str, output_txt: str = None):
+        output_txt, cleaned, start_total, duration = self._setup(input_audio, output_txt)
         try:
-            logger.info(f"[INFO] Обробка файлу: {input_audio}")
-
-            for w in _check_output_disk(self.work_dir.path, input_audio):
-                logger.warning(w)
+            pred = self.timing.predict(
+                self.model_size, self.device, duration,
+                self.chunk_minutes, self.do_align, self.do_diarize,
+                self.clean_filter != "off"
+            )
 
             t_stage = time.time()
-            cleaned = self._clean_audio(input_audio)
-            clean_elapsed = time.time() - t_stage
-            self.timing.update(self.model_size, self.device, "clean", clean_elapsed)
-            logger.info(self._elapsed("Очищення аудіо завершено"))
-
-            if self.stop_event.is_set():
-                raise TranscriptionCancelledError()
-
+            logger.info(f"[ETA] Розбиття на частини: ~{pred['split']:.0f} с")
             chunk_sec = self.chunk_minutes * 60
             chunks = split_audio(cleaned, chunk_sec=chunk_sec, overlap_sec=5,
                                  output_dir=self.work_dir.ensure_chunks_dir())
-            logger.info(f"[INFO] Розбито на {len(chunks)} частин по {self.chunk_minutes} хв")
+            logger.info(f"[DONE] Розбиття на частини: {time.time() - t_stage:.0f} с · "
+                        f"{len(chunks)} частин по {self.chunk_minutes} хв")
+            self.timing.update(self.model_size, self.device, "split", time.time() - t_stage)
 
             if self.work_dir.merged_exists:
                 merged = self.work_dir.load_json("merged.json")
                 logger.info(f"[INFO] Resume: завантажено merged.json ({len(merged)} сегментів)")
             else:
-                n_total = len(chunks)
-                duration_est = n_total * self.chunk_minutes * 60
-                pred = self.timing.predict(
-                    self.model_size, self.device, duration_est,
-                    self.chunk_minutes, self.do_align, self.do_diarize
-                )
-                logger.info(f"[INFO] Прогнозований час транскрипції: ~{pred['total']/60:.0f} хв ({n_total} чанків)")
-
-                t0 = time.time()
+                logger.info(f"[ETA] Транскрипція: ~{pred['transcribe']:.0f} с ({len(chunks)} чанків)")
                 all_segments = self._load_or_transcribe_chunks(chunks)
+
+                t_stage = time.time()
+                logger.info(f"[ETA] Зведення сегментів: ~{pred['merge']:.0f} с")
                 all_segments.sort(key=lambda s: s["start"])
                 merged = dedup_segments(all_segments, overlap_sec=5.0)
                 self.work_dir.save_json(merged, "merged.json")
-                logger.info(f"[TIME] Транскрипція + зведення: {time.time() - t0:.2f} с")
-                logger.info(f"[INFO] Сегментів після зведення: {len(merged)}")
-
-            if not output_txt:
-                base_path = os.path.splitext(self._original_path)[0]
-                output_txt = f"{base_path}_transcribed.txt"
+                logger.info(f"[DONE] Зведення сегментів: {time.time() - t_stage:.0f} с · "
+                            f"{len(merged)} сегментів")
+                self.timing.update(self.model_size, self.device, "merge", time.time() - t_stage)
 
             if self.work_dir.aligned_exists:
                 result = self.work_dir.load_json("aligned.json")
@@ -470,86 +493,49 @@ class WhisperTranscriber:
 
                 t_load = time.time()
                 audio = whisperx.load_audio(cleaned)
-                logger.info(f"[TIME] Завантаження аудіо: {time.time() - t_load:.2f} с")
+                logger.info(f"[DONE] Завантаження аудіо: {time.time() - t_load:.2f} с")
 
-                result = self._align_and_diarize(audio, merged, output_txt)
+                result = self._align_and_diarize(audio, merged, output_txt, duration=duration)
                 self.work_dir.save_json(result, "aligned.json")
 
-            total_time = time.time() - start_total
-            logger.info(f"[DONE] Загальний час обробки: {total_time / 60:.1f} хв ({total_time:.1f} с)")
-            self.work_dir.cleanup()
-            logger.info(self._elapsed("Обробку завершено"))
-            return output_txt
+            return self._teardown(start_total, output_txt)
         except Exception:
             logger.info(f"[INFO] Робоча директорія збережена: {self.work_dir.path}")
             raise
 
     def transcribe(self, input_audio: str, output_txt: str = None):
         if self.chunk_minutes > 0:
-            return self.transcribe_chunked(input_audio, output_txt)
+            return self._transcribe_chunked(input_audio, output_txt)
 
-        if not os.path.exists(input_audio):
-            raise FileNotFoundError(f"Файл '{input_audio}' не знайдено")
-
-        self._original_path = input_audio
-        existing = WorkDir.find_existing(input_audio)
-        if existing:
-            logger.info(f"[INFO] Resume: знайдено робочу директорію {existing.session_id}")
-            self.work_dir = existing
-        else:
-            self.work_dir = WorkDir(input_audio)
-        start_total = time.time()
-
+        self._ensure_model_loaded()
+        output_txt, cleaned, start_total, duration = self._setup(input_audio, output_txt)
         try:
-            logger.info(f"[INFO] Обробка файлу: {input_audio}")
-
-            for w in _check_output_disk(self.work_dir.path, input_audio):
-                logger.warning(w)
-
-            t_stage = time.time()
-            cleaned = self._clean_audio(input_audio)
-            clean_elapsed = time.time() - t_stage
-            self.timing.update(self.model_size, self.device, "clean", clean_elapsed)
-            logger.info(self._elapsed("Очищення аудіо завершено"))
-
-            if self.stop_event.is_set():
-                raise TranscriptionCancelledError()
-
-            if not output_txt:
-                base_path = os.path.splitext(self._original_path)[0]
-                output_txt = f"{base_path}_transcribed.txt"
-
             if self.work_dir.aligned_exists:
                 result = self.work_dir.load_json("aligned.json")
                 logger.info(f"[INFO] Resume: завантажено aligned.json")
                 self._write_result(result, output_txt)
             else:
-                duration = _get_duration(cleaned) or 0
                 pred = self.timing.predict(
                     self.model_size, self.device, duration,
-                    0, self.do_align, self.do_diarize
+                    0, self.do_align, self.do_diarize,
+                    self.clean_filter != "off"
                 )
-                logger.info(f"[INFO] Прогнозований час транскрипції: ~{pred['total']/60:.0f} хв")
 
-                logger.info(f"[INFO] Початок транскрипції...")
                 t0 = time.time()
+                logger.info(f"[ETA] Транскрипція: ~{pred['transcribe']:.0f} с")
                 audio = whisperx.load_audio(cleaned)
                 result = self.model.transcribe(audio)
                 transcribe_elapsed = time.time() - t0
                 self.timing.update(self.model_size, self.device, "chunk", transcribe_elapsed)
-                logger.info(f"[TIME] Транскрипція: {transcribe_elapsed:.2f} с")
+                logger.info(f"[DONE] Транскрипція: {transcribe_elapsed:.0f} с")
 
                 if self.stop_event.is_set():
                     raise TranscriptionCancelledError()
 
-                result = self._align_and_diarize(audio, result["segments"], output_txt)
+                result = self._align_and_diarize(audio, result["segments"], output_txt, duration=duration)
                 self.work_dir.save_json(result, "aligned.json")
 
-            total_time = time.time() - start_total
-            logger.info(f"[DONE] Загальний час обробки: {total_time / 60:.1f} хв ({total_time:.1f} с)")
-            self.work_dir.cleanup()
-            logger.info(self._elapsed("Обробку завершено"))
-            return output_txt
+            return self._teardown(start_total, output_txt)
         except Exception:
             logger.info(f"[INFO] Робоча директорія збережена: {self.work_dir.path}")
             raise

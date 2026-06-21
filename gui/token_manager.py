@@ -1,9 +1,5 @@
-import json
 import os
 
-import platformdirs
-
-SETTINGS_PATH = os.path.join(platformdirs.user_config_dir("audio2text"), "settings.json")
 
 def _token_modes():
     from gui.lang import _
@@ -41,27 +37,3 @@ def has_keyring() -> bool:
         return True
     except Exception:
         return False
-
-
-def load_settings() -> dict:
-    if os.path.exists(SETTINGS_PATH):
-        try:
-            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
-
-
-def save_settings(data: dict):
-    existing = {}
-    if os.path.exists(SETTINGS_PATH):
-        try:
-            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    existing.update(data)
-    os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
-    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(existing, f, indent=2, ensure_ascii=False)
