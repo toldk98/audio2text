@@ -157,7 +157,7 @@ python main.py file audio.m4a --progress
 python main.py file audio.m4a --no-align --diarize
 
 # Фільтр аудіо та навантаження CPU
-python main.py file audio.m4a --clean_filter light --cpu_profile low
+python main.py file audio.m4a --clean_filter light --max_workers 2
 
 # Інтерактивний вибір
 python main.py pick
@@ -198,8 +198,7 @@ file:
 | `diarize`       | bool | Розпізнавання спікерів                            |
 | `model`         | str  | Розмір моделі (large-v3, turbo, distil-*, …)      |
 | `clean_filter`  | str  | Фільтр аудіо: full / light / off                  |
-| `cpu_profile`   | str  | Рівень CPU: high / medium / low                   |
-| `max_workers`   | int  | Потоків (автоматично обмежується рівнем CPU)      |
+| `max_workers`   | int  | Кількість паралельних потоків                     |
 | `chunk_minutes` | int  | Розбиття на частини (0 = вимкнено)                |
 
 ### HuggingFace Token

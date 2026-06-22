@@ -159,7 +159,7 @@ python main.py file audio.m4a --progress
 python main.py file audio.m4a --no-align --diarize
 
 # Audio filter and CPU load
-python main.py file audio.m4a --clean_filter light --cpu_profile low
+python main.py file audio.m4a --clean_filter light --max_workers 2
 
 # Interactive picker
 python main.py pick
@@ -200,8 +200,7 @@ file:
 | `diarize`       | bool | Speaker diarization                          |
 | `model`         | str  | Model size (large-v3, turbo, distil-*, …)    |
 | `clean_filter`  | str  | Audio filter: full / light / off             |
-| `cpu_profile`   | str  | CPU level: high / medium / low               |
-| `max_workers`   | int  | Workers (automatically capped by CPU level)  |
+| `max_workers`   | int  | Number of parallel workers                   |
 | `chunk_minutes` | int  | Chunk split (0 = disabled)                   |
 
 ### HuggingFace Token

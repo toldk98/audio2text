@@ -83,9 +83,11 @@ class SessionDir:
 
     def save_transcribed_chunk(self, chunk_key: str, segments: list[dict]):
         os.makedirs(self.transcribed_dir, exist_ok=True)
+        tmp = os.path.join(self.transcribed_dir, f"{chunk_key}.json.tmp")
         path = os.path.join(self.transcribed_dir, f"{chunk_key}.json")
-        with open(path, "w", encoding="utf-8") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(segments, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
 
     @property
     def merged_json(self) -> str:
@@ -108,9 +110,11 @@ class SessionDir:
         return os.path.join(self.path, "result.txt")
 
     def save_json(self, data: dict | list, filename: str) -> str:
+        tmp = os.path.join(self.path, f"{filename}.tmp")
         path = os.path.join(self.path, filename)
-        with open(path, "w", encoding="utf-8") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
         return path
 
     def load_json(self, filename: str) -> dict | list | None:

@@ -30,23 +30,25 @@ def setup_logging():
         return
     _LOG_CONFIGURED = True
 
-    log_dir = WorkDirs().log_dir
-    os.makedirs(log_dir, exist_ok=True)
+    log_path = WorkDirs().log_path
 
     logger = logging.getLogger("audio2text")
     logger.setLevel(logging.DEBUG)
 
-    fh = RotatingFileHandler(
-        os.path.join(log_dir, "audio2text.log"),
-        maxBytes=5 * 1024 * 1024,
-        backupCount=3,
-        encoding="utf-8",
-    )
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    ))
-    logger.addHandler(fh)
+    try:
+        fh = RotatingFileHandler(
+            log_path,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        ))
+        logger.addHandler(fh)
+    except OSError as e:
+        print(f"[WARN] Не вдалося створити файловий логер: {e}", file=sys.stderr)
 
     sh = _TerminalHandler()
     sh.setLevel(logging.INFO)

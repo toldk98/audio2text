@@ -34,8 +34,8 @@ language_list = [
 
 chunk_options = [0, 5, 10, 15, 20, 30]
 
-cpu_levels = [
-    "high",
-    "medium",
-    "low",
-]
+cpu_levels = {
+    "high":   {"min_workers_ratio": 0.75, "nice": 0},
+    "medium": {"min_workers_ratio": 0.25, "nice": 5},
+    "low":    {"min_workers_ratio": 0.00, "nice": 10},
+}

@@ -21,154 +21,10 @@ from split_audio import _get_duration
 from gui.lang import _, _inst
 from workdirs import WorkDirs
 from settings import load_settings, save_settings
-
-
-class _GuiLogHandler(logging.Handler):
-    def __init__(self, msg_queue: queue.Queue):
-        super().__init__()
-        self.queue = msg_queue
-        self.setLevel(logging.INFO)
-        self.setFormatter(logging.Formatter("%(message)s"))
-
-    def emit(self, record):
-        msg = self.format(record)
-        self.queue.put(msg + "\n")
-
-
-class _ToolTip:
-    def __init__(self, widget, text: str):
-        self.widget = widget
-        self.text = text
-        self.tip_window = None
-        widget.bind("<Enter>", self._show)
-        widget.bind("<Leave>", self._hide)
-
-    def _show(self, event=None):
-        if self.tip_window or not self.text:
-            return
-        x = self.widget.winfo_rootx() + 20
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
-        self.tip_window = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(True)
-        tw.wm_geometry(f"+{x}+{y}")
-        lbl = tb.Label(tw, text=self.text, background="#333", foreground="#eee",
-                       wraplength=350, padding=(6, 3), font=("", 9, ""))
-        lbl.pack()
-
-    def _hide(self, event=None):
-        if self.tip_window:
-            self.tip_window.destroy()
-            self.tip_window = None
-
-
-def _dir_size(path: str) -> int:
-    total = 0
-    for dirpath, _, filenames in os.walk(path):
-        for f in filenames:
-            try:
-                total += os.path.getsize(os.path.join(dirpath, f))
-            except OSError:
-                pass
-    return total
-
-
-def _format_size(size: int) -> str:
-    for key in ("size.bytes", "size.kb", "size.mb", "size.gb"):
-        if abs(size) < 1024:
-            return f"{size:.1f} {_(key)}"
-        size /= 1024
-    return f"{size:.1f} {_('size.tb')}"
-
-
-def _scan_model_cache() -> list[dict]:
-    entries = []
-
-    whisper_dir = WorkDirs().whisper_cache
-    if os.path.isdir(whisper_dir):
-        for fname in os.listdir(whisper_dir):
-            fpath = os.path.join(whisper_dir, fname)
-            if not os.path.isfile(fpath) or not fname.endswith(".pt"):
-                continue
-            sz = os.path.getsize(fpath)
-            mtime = os.path.getmtime(fpath)
-            name = fname.removesuffix(".pt")
-            entries.append({"name": name, "type": "Whisper", "size": sz,
-                            "date": time.strftime("%Y-%m-%d", time.localtime(mtime)),
-                            "path": fpath})
-
-    hf_dir = WorkDirs().hf_hub
-    if os.path.isdir(hf_dir):
-        for entry in sorted(os.listdir(hf_dir)):
-            if not entry.startswith("models--"):
-                continue
-            parts = entry.split("--")
-            name = "/".join(parts[1:])
-            fpath = os.path.join(hf_dir, entry)
-            if not os.path.isdir(fpath):
-                continue
-            sz = _dir_size(fpath)
-            mtime = os.path.getmtime(fpath)
-            entries.append({"name": name, "type": "HF Hub", "size": sz,
-                            "date": time.strftime("%Y-%m-%d", time.localtime(mtime)),
-                            "path": fpath})
-
-    return entries
-
-
-def _fmt_model_size_gui(mb: int) -> str:
-    if mb >= 1024:
-        gb = round(mb / 1024, 1)
-        s = f"{gb:g}".rstrip("0").rstrip(".")
-        return f"~{s} GB"
-    return f"~{mb} MB"
-
-
-_MODEL_SIZES = {k: _fmt_model_size_gui(v) for k, v in MODEL_SIZES_MB.items()}
-
-
-def _model_cache_status(model_size: str) -> str:
-    size_str = _MODEL_SIZES.get(model_size, "")
-    whisper_pt = os.path.join(WorkDirs().whisper_cache, f"{model_size}.pt")
-    if os.path.isfile(whisper_pt):
-        sz = os.path.getsize(whisper_pt)
-        return _format_size(sz)
-
-    hf_dir = WorkDirs().hf_hub
-    nd = os.path.join(hf_dir, f"models--Systran--faster-whisper-{model_size}")
-    if os.path.isdir(nd):
-        return _format_size(_dir_size(nd))
-
-    if model_size.startswith("distil-"):
-        d = os.path.join(hf_dir, f"models--Systran--faster-distil-whisper-{model_size[7:]}")
-        if os.path.isdir(d):
-            return _format_size(_dir_size(d))
-
-    return f"⚡ {size_str}" if size_str else "⚡"
-
-
-def _profile_names(mode: str | None = None) -> list[str]:
-    return sorted(name for name, _ in list_profiles(mode=mode))
-
-
-def _cpu_display_map() -> dict[str, str]:
-    return {"high": _("cpu.level_high"), "medium": _("cpu.level_medium"), "low": _("cpu.level_low")}
-
-
-def _filter_display_map() -> dict[str, str]:
-    return {"full": _("filter.value_full"), "light": _("filter.value_light"), "off": _("filter.value_off")}
-
-
-def _lang_display_map() -> dict[str, str]:
-    import os
-    locales_dir = os.path.join(os.path.dirname(__file__), "locales")
-    codes = []
-    try:
-        for fn in sorted(os.listdir(locales_dir)):
-            if fn.endswith(".json"):
-                codes.append(fn[:-5])
-    except OSError:
-        codes = ["uk", "en"]
-    return {code: _(f"lang.{code}") for code in codes}
+from gui.helpers import (_dir_size, _format_size, _scan_model_cache,
+                         _model_cache_status, _profile_names, _MODEL_SIZES,
+                         _cpu_display_map, _cpu_level_from_workers, _filter_display_map, _lang_display_map)
+from gui.widgets import _ToolTip, _GuiLogHandler
 
 
 class Audio2TextApp(tb.Window):
@@ -264,7 +120,7 @@ class Audio2TextApp(tb.Window):
 
         self.token_mode_var = tk.StringVar()
         self.token_mode_cb = tb.Combobox(self._token_frame, textvariable=self.token_mode_var,
-                                          values=list(_token_modes().values()), state="readonly", width=30)
+                                         values=list(_token_modes().values()), state="readonly", width=30)
         self.token_mode_cb.grid(row=0, column=2, padx=(0, 5))
 
         self._save_token_btn = tb.Button(self._token_frame, text=_("token.save"), command=self._save_token)
@@ -275,20 +131,59 @@ class Audio2TextApp(tb.Window):
             row=1, column=1, columnspan=3, sticky=W, pady=(3, 0))
         self._token_frame.grid_remove()
 
-        # --- CPU Load ---
-        cpu_frame = tb.Frame(parent)
-        cpu_frame.grid(row=3, column=0, sticky=W, pady=(5, 0), padx=10)
-        self._cpu_label = tb.Label(cpu_frame, text=_("cpu.label"), foreground="gray")
-        self._cpu_label.pack(side=LEFT, padx=(0, 5))
-        cpu_disp = _cpu_display_map()
-        self.cpu_var = tk.StringVar(value=cpu_disp["high"])
-        self.cpu_cb = tb.Combobox(cpu_frame, textvariable=self.cpu_var,
-                                  values=list(cpu_disp.values()), state="readonly", width=12)
-        self.cpu_cb.pack(side=LEFT)
-        _ToolTip(self.cpu_cb, _("cpu.tooltip"))
-        self._cpu_override_hint = tb.Label(cpu_frame, text=_("cpu.override_hint"), foreground="gray")
-        self._cpu_override_hint.pack(side=LEFT, padx=(8, 0))
+        # --- Override Panel ---
+        self._ov_btn = tb.Button(parent, text="", command=self._toggle_ov,
+                                 bootstyle="secondary-link", width=35)
+        self._ov_btn.grid(row=3, column=0, sticky=W, pady=(5, 0), padx=10)
 
+        self._ov_frame = tb.Frame(parent)
+        self._ov_visible = False
+        self._ov_dirty = False
+
+        ncpu = os.cpu_count() or 4
+        self._ov_workers_var = tk.IntVar(value=2)
+        self._ov_workers_lbl = tb.Label(self._ov_frame, text=_("cpu.label"))
+        self._ov_workers_lbl.grid(row=0, column=0, sticky=W, padx=(5, 5), pady=2)
+        self._ov_scale = tb.Scale(self._ov_frame, from_=1, to=ncpu,
+                                  variable=self._ov_workers_var, orient=tk.HORIZONTAL,
+                                  length=200, command=lambda v: self._on_ov_change())
+        self._ov_scale.grid(row=0, column=1, sticky=EW, padx=(0, 10), pady=2)
+
+        self._ov_workers_display = tk.StringVar(value="2 · Високе")
+        self._ov_workers_lbl2 = tb.Label(self._ov_frame, textvariable=self._ov_workers_display,
+                                         foreground="cyan", width=30)
+        self._ov_workers_lbl2.grid(row=0, column=2, sticky=W, pady=2)
+
+        self._ov_chunk_var = tk.IntVar(value=0)
+        self._ov_chunk_lbl = tb.Label(self._ov_frame, text=_("profiles.dialog_chunk"))
+        self._ov_chunk_lbl.grid(row=1, column=0, sticky=W, padx=(5, 5), pady=2)
+        ov_chunk_spin = tb.Spinbox(self._ov_frame, from_=0, to=60, textvariable=self._ov_chunk_var, width=8)
+        ov_chunk_spin.grid(row=1, column=1, sticky=W, padx=(0, 10), pady=2)
+
+        f_disp = _filter_display_map()
+        self._ov_filter_var = tk.StringVar()
+        self._ov_filter_lbl = tb.Label(self._ov_frame, text=_("profiles.dialog_filter"))
+        self._ov_filter_lbl.grid(row=2, column=0, sticky=W, padx=(5, 5), pady=2)
+        self._ov_filter_cb = tb.Combobox(self._ov_frame, textvariable=self._ov_filter_var,
+                                         values=list(f_disp.values()), state="readonly", width=12)
+        self._ov_filter_cb.grid(row=2, column=1, sticky=W, padx=(0, 10), pady=2)
+
+        self._ov_align_var = tk.BooleanVar(value=True)
+        self._ov_diarize_var = tk.BooleanVar(value=False)
+        ov_align_frame = tb.Frame(self._ov_frame)
+        ov_align_frame.grid(row=3, column=0, columnspan=2, sticky=W, padx=5, pady=2)
+        self._ov_align_cb = tb.Checkbutton(ov_align_frame, text=_("profiles.dialog_align"),
+                                           variable=self._ov_align_var)
+        self._ov_align_cb.pack(side=LEFT, padx=(0, 15))
+        self._ov_diarize_cb = tb.Checkbutton(ov_align_frame, text=_("profiles.dialog_diarize"),
+                                             variable=self._ov_diarize_var)
+        self._ov_diarize_cb.pack(side=LEFT)
+
+        self._ov_refresh_btn_text()
+        self._update_workers_display()
+        for var in (self._ov_workers_var, self._ov_chunk_var,
+                    self._ov_filter_var, self._ov_align_var, self._ov_diarize_var):
+            var.trace_add("write", lambda *a: self._on_ov_change())
         self.profile_cb.bind("<<ComboboxSelected>>", self._update_profile_desc)
         self.file_var.trace_add("write", lambda *a: self._update_profile_desc())
         self._update_profile_desc()
@@ -296,7 +191,7 @@ class Audio2TextApp(tb.Window):
         # --- Run ---
         self.run_btn = tb.Button(parent, text=_("run.start"), bootstyle="success",
                                  command=self._run, width=20)
-        self.run_btn.grid(row=4, column=0, pady=(10, 5))
+        self.run_btn.grid(row=5, column=0, pady=(10, 5))
 
     def _build_log_tab(self, parent: tb.Frame):
         parent.columnconfigure(0, weight=1)
@@ -515,9 +410,20 @@ class Audio2TextApp(tb.Window):
         self._token_frame.configure(text=_("token.frame"))
         self._save_token_btn.configure(text=_("token.save"))
         self._profile_frame.configure(text=_("profile.frame"))
-        self._cpu_label.configure(text=_("cpu.label"))
-        self._cpu_override_hint.configure(text=_("cpu.override_hint"))
         self.run_btn.configure(text=_("run.start"))
+
+        self._ov_workers_lbl.configure(text=_("cpu.label"))
+        self._ov_chunk_lbl.configure(text=_("profiles.dialog_chunk"))
+        self._ov_filter_lbl.configure(text=_("profiles.dialog_filter"))
+        self._ov_align_cb.configure(text=_("profiles.dialog_align"))
+        self._ov_diarize_cb.configure(text=_("profiles.dialog_diarize"))
+        self._update_workers_display()
+        f_disp = _filter_display_map()
+        f_rev = {v: k for k, v in f_disp.items()}
+        cur_f = f_rev.get(self._ov_filter_var.get(), "full")
+        self._ov_filter_cb.configure(values=list(f_disp.values()))
+        self._ov_filter_var.set(f_disp[cur_f])
+        self._ov_refresh_btn_text()
 
         self._settings_sub.tab(0, text=_("settings.sub_general"))
         self._settings_sub.tab(1, text=_("settings.sub_profiles"))
@@ -561,6 +467,59 @@ class Audio2TextApp(tb.Window):
         ldm = _lang_display_map()
         self.lang_var.set(ldm.get(lang, "uk"))
         self._lang_cb.configure(values=sorted(ldm.values()))
+
+        mode_disp = _token_modes()
+        self.token_mode_cb.configure(values=list(mode_disp.values()))
+        current_mode = self.token_mode_var.get()
+        if current_mode in mode_disp.values():
+            self.token_mode_var.set(current_mode)
+        elif mode_disp:
+            self.token_mode_cb.current(0)
+
+    # ---------- override panel ----------
+    def _toggle_ov(self):
+        self._ov_visible = not self._ov_visible
+        if self._ov_visible:
+            self._ov_frame.grid(row=4, column=0, sticky=EW, pady=(3, 0), padx=10)
+        else:
+            self._ov_frame.grid_remove()
+        self._ov_refresh_btn_text()
+
+    def _ov_refresh_btn_text(self):
+        prefix = "▼" if self._ov_visible else "▶"
+        base = _("override.header")
+        if self._ov_dirty and not self._ov_visible:
+            self._ov_btn.configure(text=f"{prefix} {base} ⚡")
+        else:
+            self._ov_btn.configure(text=f"{prefix} {base}")
+
+    def _update_workers_display(self):
+        val = self._ov_workers_var.get()
+        level = _cpu_level_from_workers(val)
+        level_text = _(f"cpu.level_{level}")
+        self._ov_workers_display.set(f"{val} · {level_text}")
+
+    def _on_ov_change(self):
+        if getattr(self, "_ov_syncing", False):
+            return
+        self._ov_dirty = True
+        self._update_workers_display()
+        self._ov_refresh_btn_text()
+        self._update_profile_desc(_resync=False)
+
+    def _sync_ov_from_profile(self, cfg: dict):
+        self._ov_syncing = True
+        f_disp = _filter_display_map()
+        self._ov_workers_var.set(cfg.get("max_workers", 2))
+        self._ov_chunk_var.set(cfg.get("chunk_minutes", 0))
+        filter_raw = cfg.get("clean_filter", "full")
+        self._ov_filter_var.set(f_disp.get(filter_raw, filter_raw))
+        self._ov_align_var.set(cfg.get("align", True))
+        self._ov_diarize_var.set(cfg.get("diarize", True))
+        self._ov_syncing = False
+        self._ov_dirty = False
+        self._update_workers_display()
+        self._ov_refresh_btn_text()
 
     # ---------- cache ----------
     def _refresh_cache_list(self):
@@ -643,9 +602,6 @@ class Audio2TextApp(tb.Window):
                 opts.append("diar")
             if cfg.get("chunk_minutes", 0) > 0:
                 opts.append(f"chunk{cfg['chunk_minutes']}")
-            cpu = cfg.get("cpu_profile", "high")
-            if cpu != "high":
-                opts.append(f"cpu:{cpu}")
             opts_str = ", ".join(opts) if opts else "-"
             self.profile_tree.insert("", tk.END, values=(name, model, lang, opts_str))
         self._refresh_transcribe_profiles()
@@ -714,10 +670,12 @@ class Audio2TextApp(tb.Window):
         model_status_var = tk.StringVar()
         model_status_lbl = tb.Label(model_frame, textvariable=model_status_var, font=("", 9, ""))
         model_status_lbl.pack(side=LEFT, padx=(8, 0))
+
         def _update_model_status(*args):
             s = _model_cache_status(model_var.get())
             model_status_var.set(s)
             model_status_lbl.configure(bootstyle="warning" if s.startswith("⚡") else "success")
+
         model_var.trace_add("write", _update_model_status)
         _update_model_status()
 
@@ -731,39 +689,14 @@ class Audio2TextApp(tb.Window):
         diarize_var = tk.BooleanVar(value=(initial or {}).get("diarize", False))
         tb.Checkbutton(dialog, variable=diarize_var).grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
-        row += 1
-        cpu_lbl = tb.Label(dialog, text=_("profiles.dialog_cpu"))
-        cpu_lbl.grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        _ToolTip(cpu_lbl, _("profiles.dialog_cpu_tooltip"))
-        cpu_disp = _cpu_display_map()
-        cpu_init_raw = (initial or {}).get("cpu_profile", "high")
-        cpu_profile_var = tk.StringVar(value=cpu_disp.get(cpu_init_raw, cpu_init_raw))
-        cpu_cb = tb.Combobox(dialog, textvariable=cpu_profile_var, values=list(cpu_disp.values()),
-                             state="readonly", width=12)
-        cpu_cb.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
-        cpu_rev = {v: k for k, v in _cpu_display_map().items()}
         f_rev = {v: k for k, v in _filter_display_map().items()}
 
         row += 1
         tb.Label(dialog, text=_("profiles.dialog_workers")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
-        workers_frame = tb.Frame(dialog)
-        workers_frame.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
+        ncpu = os.cpu_count() or 4
         workers_var = tk.IntVar(value=(initial or {}).get("max_workers", 2))
-        workers_spin = tb.Spinbox(workers_frame, from_=1, to=8, textvariable=workers_var, width=8)
-        workers_spin.pack(side=LEFT)
-        cpu_limit_label = tb.Label(workers_frame, text="", foreground="gray")
-        cpu_limit_label.pack(side=LEFT, padx=(8, 0))
-
-        def _update_workers_cap(*args):
-            ncpu = os.cpu_count() or 4
-            level = cpu_rev.get(cpu_profile_var.get(), "high")
-            max_w = {"low": 1, "medium": max(2, ncpu // 2), "high": ncpu}.get(level, ncpu)
-            workers_spin.configure(to=max_w)
-            if workers_var.get() > max_w:
-                workers_var.set(max_w)
-            cpu_limit_label.configure(text=_("profiles.dialog_workers_max", n=max_w))
-        cpu_profile_var.trace_add("write", _update_workers_cap)
-        _update_workers_cap()
+        workers_spin = tb.Spinbox(dialog, from_=1, to=ncpu, textvariable=workers_var, width=8)
+        workers_spin.grid(row=row, column=1, sticky=W, padx=(0, 10), pady=2)
 
         row += 1
         tb.Label(dialog, text=_("profiles.dialog_chunk")).grid(row=row, column=0, sticky=W, padx=(10, 5), pady=2)
@@ -784,7 +717,6 @@ class Audio2TextApp(tb.Window):
                 "chunk_minutes": chunk_var.get(),
                 "max_workers": workers_var.get(),
                 "clean_filter": f_rev.get(filter_var.get(), "full"),
-                "cpu_profile": cpu_rev.get(cpu_profile_var.get(), "high"),
                 "mode": mode,
                 "model": model_var.get(),
             }
@@ -906,29 +838,36 @@ class Audio2TextApp(tb.Window):
         else:
             self._token_frame.grid()
 
-    def _update_profile_desc(self, event=None):
+    def _update_profile_desc(self, event=None, _resync=True):
         name = self.profile_var.get()
         if not name:
             self.profile_desc_var.set("")
             self._timing_var.set("")
+            self.run_btn.configure(text=_("run.start"))
             return
         cfg = get_profile(name)
         if not cfg:
             self.profile_desc_var.set("")
             self._timing_var.set("")
+            self.run_btn.configure(text=_("run.start"))
             return
+
+        if _resync:
+            self._sync_ov_from_profile(cfg)
+
         model = cfg.get("model", "large-v3")
-        cpu = cfg.get("cpu_profile", "high")
-        cpu_disp = _cpu_display_map()
+        workers = self._ov_workers_var.get()
+        level = _cpu_level_from_workers(workers)
+        level_text = _(f"cpu.level_{level}")
         try:
             import torch
             device_str = "CUDA" if torch.cuda.is_available() else "CPU"
         except ImportError:
             device_str = "CPU"
-        self.profile_desc_var.set(f"  {model} · {device_str} · ⚡{cpu_disp.get(cpu, cpu)}")
-        self.cpu_var.set(cpu_disp.get(cpu, cpu))
+        self.profile_desc_var.set(
+            f"  {model} · {device_str} · {workers} {'потоків' if workers > 1 else 'потік'} · {level_text}")
 
-        self._update_token_visibility(cfg.get("diarize", True))
+        self._update_token_visibility(self._ov_diarize_var.get())
 
         # --- timing breakdown ---
         file_path = self.file_var.get().strip()
@@ -947,16 +886,17 @@ class Audio2TextApp(tb.Window):
             device = "cuda" if torch.cuda.is_available() else "cpu"
         except ImportError:
             device = "cpu"
-        model = cfg.get("model", "large-v3")
-        chunk_minutes = cfg.get("chunk_minutes", 0)
-        do_align = cfg.get("align", True)
-        do_diarize = cfg.get("diarize", True)
-        do_clean = cfg.get("clean_filter", "full") != "off"
+        f_rev = {v: k for k, v in _filter_display_map().items()}
+        chunk_minutes = self._ov_chunk_var.get()
+        do_align = self._ov_align_var.get()
+        do_diarize = self._ov_diarize_var.get()
+        do_clean = f_rev.get(self._ov_filter_var.get(), "full") != "off"
 
         try:
             pred = self.timing_gui.predict(
                 model, device, duration,
-                chunk_minutes, do_align, do_diarize, do_clean
+                chunk_minutes, do_align, do_diarize, do_clean,
+                max_workers=self._ov_workers_var.get(),
             )
         except Exception:
             self._timing_var.set("")
@@ -965,9 +905,9 @@ class Audio2TextApp(tb.Window):
 
         def fmt(s: float) -> str:
             if s >= 3600:
-                return f"{s/3600:.1f} год"
+                return f"{s / 3600:.1f} год"
             if s >= 60:
-                return f"{s/60:.0f} хв"
+                return f"{s / 60:.0f} хв"
             return f"{s:.0f} с"
 
         lines = []
@@ -996,7 +936,8 @@ class Audio2TextApp(tb.Window):
     def _browse_file(self):
         path = filedialog.askopenfilename(
             title=_("file.dialog_title"),
-            filetypes=[(_("file.dialog_filter_name"), _("file.dialog_filter_pattern")), (_("file.dialog_all_files"), "*.*")])
+            filetypes=[(_("file.dialog_filter_name"), _("file.dialog_filter_pattern")),
+                       (_("file.dialog_all_files"), "*.*")])
         if path:
             self.file_var.set(path)
 
@@ -1048,6 +989,13 @@ class Audio2TextApp(tb.Window):
             messagebox.showwarning(_("common.error"), _("run.err_no_file"))
             return
 
+        from whisper_offline import _probe_nice
+        ok, msg = _probe_nice()
+        if not ok:
+            key = "run.warn_cpu_priority" if hasattr(os, "nice") else "run.warn_cpu_priority_win"
+            if not messagebox.askyesno(_("common.warning"), _(key, msg=msg), icon="warning"):
+                return
+
         profile_name = self.profile_var.get()
         if not profile_name:
             messagebox.showwarning(_("common.error"), _("run.err_no_profile"))
@@ -1057,6 +1005,14 @@ class Audio2TextApp(tb.Window):
         if not cfg:
             messagebox.showwarning(_("common.error"), _("run.err_profile_not_found", name=profile_name))
             return
+
+        # Merge override panel values into cfg
+        f_rev = {v: k for k, v in _filter_display_map().items()}
+        cfg["max_workers"] = self._ov_workers_var.get()
+        cfg["chunk_minutes"] = self._ov_chunk_var.get()
+        cfg["clean_filter"] = f_rev.get(self._ov_filter_var.get(), "full")
+        cfg["align"] = self._ov_align_var.get()
+        cfg["diarize"] = self._ov_diarize_var.get()
 
         # only require HF token when diarization is enabled
         self._hf_token_validated = False
@@ -1119,7 +1075,6 @@ class Audio2TextApp(tb.Window):
                 max_workers=cfg.get("max_workers", 2),
                 allow_download=self.allow_dl_var.get(),
                 clean_filter=cfg.get("clean_filter", "full"),
-                cpu_profile={v: k for k, v in _cpu_display_map().items()}.get(self.cpu_var.get(), "high"),
                 stop_event=stop_event,
             )
             transcriber.transcribe(file_path)

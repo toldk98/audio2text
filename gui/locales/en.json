@@ -31,8 +31,8 @@
   "cpu.level_high": "High",
   "cpu.level_medium": "Medium",
   "cpu.level_low": "Low",
-  "cpu.tooltip": "High — all cores\nMedium — half cores\nLow — 1 thread, low priority",
-  "cpu.override_hint": "(overrides profile)",
+  "cpu.tooltip": "Slider regulates the number of threads (max_workers).\nCPU load level is computed automatically.",
+  "override.header": "Advanced settings",
 
   "run.start": "▶ Start",
   "run.cancel": "✕ Cancel",
@@ -46,6 +46,8 @@
   "run.log_stopped": "⏹ Stopped by user.\n",
   "run.log_error": "❌ Error: {e}\n",
   "run.confirm_exit": "Transcription is still running.\nCancel and exit?",
+  "run.warn_cpu_priority": "Failed to set CPU priority via psutil.\n{msg}\n\nos.nice() is available — will be used automatically.\nContinue?",
+  "run.warn_cpu_priority_win": "Failed to set CPU priority.\n{msg}\n\nContinue without CPU priority limit?",
 
   "settings.sub_general": "General",
   "settings.sub_profiles": "Profiles",
@@ -60,8 +62,6 @@
   "settings.lang_frame": "Interface Language",
   "settings.lang_label": "Language:",
   "settings.lang_apply": "Apply",
-  "settings.lang_restart_hint": "Click «Apply» to switch language immediately.",
-
   "profiles.sub_file": "File",
 
   "profiles.frame": "Profiles",
@@ -99,8 +99,7 @@
 
   "profiles.dialog_filter": "Audio filter:",
   "profiles.dialog_filter_tooltip": "Full — afftdn+loudnorm (quality, ~12 min)\nLight — highpass+lowpass (fast, ~2 min)\nOff — no processing",
-  "profiles.dialog_cpu": "CPU load:",
-  "profiles.dialog_cpu_tooltip": "High — all cores (default)\nMedium — half cores, nice=10\nLow — 1 thread, nice=19",
+  "profiles.dialog_workers_tooltip": "Number of parallel threads.\nCPU level is computed automatically:\nHigh — ≥75% cores\nMedium — ≥25% cores\nLow — <25% cores",
   "profiles.dialog_err_name_required": "Profile name is required.",
   "profiles.dialog_save": "💾 Save",
   "profiles.dialog_cancel": "Cancel",

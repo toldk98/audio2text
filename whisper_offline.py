@@ -12,7 +12,7 @@ from logger import get_logger
 from timing import TimingDB
 from session_dir import SessionDir
 from workdirs import WorkDirs
-from config import MODEL_SIZES_MB
+from config import MODEL_SIZES_MB, cpu_levels
 
 logger = get_logger(__name__)
 
@@ -86,43 +86,68 @@ def _check_output_disk(work_dir_path: str, input_path: str) -> list[str]:
     return warnings
 
 
-def _apply_cpu_profile(level: str) -> int | None:
+def _probe_nice() -> tuple[bool, str]:
+    try:
+        import psutil
+        p = psutil.Process()
+        current = p.nice()
+        if current < 19:
+            p.nice(current + 1)
+            p.nice(current)
+        else:
+            p.nice(current - 1)
+            p.nice(current)
+        return (True, "psutil")
+    except Exception as e:
+        psutil_err = str(e)
+    if hasattr(os, "nice"):
+        try:
+            os.nice(0)
+            return (True, "os.nice")
+        except Exception as e:
+            return (False, f"psutil: {psutil_err}, os.nice: {e}")
+    return (False, f"psutil: {psutil_err}")
+
+
+def _apply_cpu_config(max_workers: int):
     os.environ.pop("OMP_NUM_THREADS", None)
     os.environ.pop("MKL_NUM_THREADS", None)
     os.environ.pop("OPENBLAS_NUM_THREADS", None)
     os.environ.pop("TORCH_NUM_THREADS", None)
 
     ncpu = os.cpu_count() or 4
+    ratio = max_workers / ncpu
 
-    if level == "low":
-        n_threads = 1
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
-        os.environ["OPENBLAS_NUM_THREADS"] = "1"
-        os.environ["TORCH_NUM_THREADS"] = "1"
+    level_name = "low"
+    nice_val = 10
+    for name, lvl in sorted(cpu_levels.items(),
+                            key=lambda x: x[1]["min_workers_ratio"], reverse=True):
+        if ratio >= lvl["min_workers_ratio"]:
+            level_name = name
+            nice_val = lvl["nice"]
+            break
+
+    os.environ["OMP_NUM_THREADS"] = str(max_workers)
+    os.environ["MKL_NUM_THREADS"] = str(max_workers)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(max_workers)
+    os.environ["TORCH_NUM_THREADS"] = str(max_workers)
+
+    ok, method = _probe_nice()
+    if ok:
         try:
-            import psutil
-            psutil.Process().nice(19)
-        except Exception:
-            pass
-
-    elif level == "medium":
-        n_threads = max(2, ncpu // 2)
-        os.environ["OMP_NUM_THREADS"] = str(n_threads)
-        os.environ["MKL_NUM_THREADS"] = str(n_threads)
-        os.environ["OPENBLAS_NUM_THREADS"] = str(n_threads)
-        os.environ["TORCH_NUM_THREADS"] = str(n_threads)
-        try:
-            import psutil
-            psutil.Process().nice(10)
-        except Exception:
-            pass
-
+            if method == "psutil":
+                import psutil
+                psutil.Process().nice(nice_val)
+                logger.info(f"[INFO] CPU nice встановлено через psutil: {nice_val}")
+            else:
+                os.nice(nice_val - os.nice(0))
+                logger.info(f"[INFO] CPU nice встановлено через os.nice: {nice_val}")
+        except Exception as e:
+            logger.warning(f"[WARN] Не вдалося встановити nice={nice_val}: {e}")
     else:
-        n_threads = ncpu
+        logger.warning(f"[WARN] Не вдалося встановити nice={nice_val}: {method}")
 
-    logger.info(f"[INFO] CPU профіль: {level} ({os.environ.get('OMP_NUM_THREADS', 'всі')} потоків)")
-    return n_threads
+    logger.info(f"[INFO] CPU налаштування: {max_workers} потоків · рівень {level_name} · nice={nice_val}")
 
 
 class DownloadCancelledError(Exception):
@@ -191,7 +216,6 @@ class WhisperTranscriber:
             max_workers: int = 2,
             allow_download: bool = True,
             clean_filter: str = "full",
-            cpu_profile: str = "high",
             stop_event: threading.Event | None = None,
             progress_callback=None,
     ):
@@ -204,7 +228,6 @@ class WhisperTranscriber:
         self.max_workers = max_workers
         self.allow_download = allow_download
         self.clean_filter = clean_filter
-        self.cpu_profile = cpu_profile
         self.stop_event = stop_event or threading.Event()
         self.progress_callback = progress_callback
 
@@ -216,13 +239,7 @@ class WhisperTranscriber:
         logger.info(f"[INFO] Ініціалізація WhisperTranscriber...")
         logger.info(f"[INFO] Пристрій: {self.device}, режим обчислень: {self.compute_type}")
 
-        cpu_max_workers = _apply_cpu_profile(self.cpu_profile)
-        if self.max_workers > cpu_max_workers:
-            logger.info(
-                f"[INFO] max_workers знижено {self.max_workers} → {cpu_max_workers}"
-                f" (CPU профіль: {self.cpu_profile})"
-            )
-            self.max_workers = cpu_max_workers
+        _apply_cpu_config(self.max_workers)
 
         warnings, errors = _check_resources(
             self.model_size, self.do_align, self.do_diarize
@@ -251,7 +268,7 @@ class WhisperTranscriber:
         )
         logger.info(self._elapsed("Ініціалізація моделі завершена"))
 
-    def _clean_audio(self, input_audio: str) -> str:
+    def _clean_audio(self, input_audio: str, duration: float = 0) -> str:
         clean_path = self.work_dir.cleaned_audio
 
         if os.path.exists(clean_path):
@@ -276,14 +293,19 @@ class WhisperTranscriber:
         ]
 
         try:
+            timeout = min(max(60, int(duration)), 1800) if duration > 0 else 1800
             subprocess.run(
                 ffmpeg_cmd,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                timeout=timeout,
             )
             logger.info(f"[INFO] Створено очищений файл: {clean_path}")
             return clean_path
+        except subprocess.TimeoutExpired:
+            logger.warning(f"[WARN] ffmpeg clean перевищив ліміт {timeout}с, використовується оригінальний файл.")
+            return input_audio
         except subprocess.CalledProcessError as e:
             logger.warning("[WARN] ffmpeg завершився з помилкою, використовується оригінальний файл.")
             logger.warning(e.stderr.decode("utf-8", errors="ignore"))
@@ -428,7 +450,7 @@ class WhisperTranscriber:
         clean_pred = self.timing.get(self.model_size, self.device, "clean", duration)
         logger.info(f"[ETA] Очищення аудіо: ~{clean_pred:.0f} с")
         t_stage = time.time()
-        cleaned = self._clean_audio(input_audio)
+        cleaned = self._clean_audio(input_audio, duration)
         clean_elapsed = time.time() - t_stage
         self.timing.update(self.model_size, self.device, "clean", clean_elapsed, duration)
         logger.info(f"[DONE] Очищення аудіо: {clean_elapsed:.0f} с")
@@ -455,7 +477,8 @@ class WhisperTranscriber:
             pred = self.timing.predict(
                 self.model_size, self.device, duration,
                 self.chunk_minutes, self.do_align, self.do_diarize,
-                self.clean_filter != "off"
+                self.clean_filter != "off",
+                max_workers=self.max_workers,
             )
 
             t_stage = time.time()
@@ -504,10 +527,11 @@ class WhisperTranscriber:
             raise
 
     def transcribe(self, input_audio: str, output_txt: str = None):
+        self._ensure_model_loaded()
+
         if self.chunk_minutes > 0:
             return self._transcribe_chunked(input_audio, output_txt)
 
-        self._ensure_model_loaded()
         output_txt, cleaned, start_total, duration = self._setup(input_audio, output_txt)
         try:
             if self.work_dir.aligned_exists:
@@ -518,7 +542,8 @@ class WhisperTranscriber:
                 pred = self.timing.predict(
                     self.model_size, self.device, duration,
                     0, self.do_align, self.do_diarize,
-                    self.clean_filter != "off"
+                    self.clean_filter != "off",
+                    max_workers=self.max_workers,
                 )
 
                 t0 = time.time()

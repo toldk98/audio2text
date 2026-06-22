@@ -44,7 +44,14 @@ def split_audio(audio_path: str, chunk_sec: int = 600, overlap_sec: int = 5,
             "-f", "wav",
             out_path,
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=max(30, chunk_sec * 2))
+        except subprocess.TimeoutExpired:
+            logger = __import__("logging").getLogger("audio2text.split_audio")
+            logger.warning(f"[WARN] ffmpeg split перевищив ліміт, чанк пропущено: {out_path}")
+            start += chunk_sec
+            index += 1
+            continue
 
         chunks.append((out_path, start))
         start += chunk_sec

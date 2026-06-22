@@ -352,7 +352,6 @@ def _run_file_mode(cfg: dict, audio_path: str):
         do_diarize=cfg.get("diarize", True),
         chunk_minutes=cfg.get("chunk_minutes", 0),
         max_workers=cfg.get("max_workers", 2),
-        cpu_profile=cfg.get("cpu_profile", "high"),
         allow_download=True,
         stop_event=None,
     )

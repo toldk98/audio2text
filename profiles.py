@@ -106,7 +106,6 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
             },
             "full_uk_noalign": {
                 "description": "Повна транскрипція (large-v3) + діаризація, без вирівнювання",
@@ -123,7 +122,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
             "full_en": {
                 "description": "Full transcription (large-v3) + diarization",
@@ -140,7 +139,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
         },
         "distil-large-v2": {
@@ -159,7 +158,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
         },
         "distil-large-v3": {
@@ -178,7 +177,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
         },
         "distil-large-v3.5": {
@@ -197,7 +196,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
         },
         "large-v3-turbo": {
@@ -216,7 +215,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
             "turbo_uk_noalign": {
                 "description": "Дуже швидка (large-v3-turbo) + діаризація, без вирівнювання",
@@ -233,7 +232,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
             "turbo_en": {
                 "description": "Fast full transcription (large-v3-turbo) + diarization",
@@ -250,7 +249,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
         },
         "turbo": {
@@ -269,7 +268,6 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
             },
             "turbo_alt_uk_noalign": {
                 "description": "Дуже швидка (turbo) + діаризація, без вирівнювання",
@@ -286,7 +284,7 @@ EMBEDDED_PROFILES = {
                 "diarize": True,
                 "chunk_minutes": 10,
                 "max_workers": 2,
-                "cpu_profile": "medium",
+
             },
         },
     },

@@ -21,7 +21,6 @@ _PROFILE_KEYS = {
     "align": "align",
     "diarize": "diarize",
     "clean_filter": "clean_filter",
-    "cpu_profile": "cpu_profile",
     "chunk_minutes": "chunk_minutes",
     "max_workers": "max_workers",
 }
@@ -74,7 +73,7 @@ def build_parser():
         "--max_workers",
         type=int,
         default=None,
-        help="Кількість паралельних потоків для обробки чанків",
+        help="Кількість паралельних потоків для обробки чанків (за замовчуванням: кількість ядер CPU)",
     )
     parser.add_argument(
         "-y", "--yes",
@@ -98,12 +97,6 @@ def build_parser():
         choices=["full", "light", "off"],
         default=None,
         help="Рівень фільтрації аудіо (full — ffmpeg, light — легка, off — без)",
-    )
-    parser.add_argument(
-        "--cpu_profile",
-        choices=["high", "medium", "low"],
-        default=None,
-        help="Рівень завантаження CPU (high — всі ядра, medium — половина, low — чверть)",
     )
     parser.add_argument(
         "--profile",
@@ -233,8 +226,6 @@ def _apply_profile(args, profile_name: str):
         args.max_workers = cfg.get("max_workers", 2)
     if args.clean_filter is None:
         args.clean_filter = cfg.get("clean_filter", "full")
-    if args.cpu_profile is None:
-        args.cpu_profile = cfg.get("cpu_profile", "high")
     if args.align is None:
         args.align = cfg.get("align", True)
     if args.diarize is None:
@@ -255,8 +246,6 @@ def _fill_defaults(args):
         args.max_workers = 2
     if args.clean_filter is None:
         args.clean_filter = "full"
-    if args.cpu_profile is None:
-        args.cpu_profile = "high"
     if args.align is None:
         args.align = True
     if args.diarize is None:
@@ -345,7 +334,6 @@ def run_cli():
                 do_align=args.align,
                 do_diarize=args.diarize,
                 clean_filter=args.clean_filter,
-                cpu_profile=args.cpu_profile,
                 chunk_minutes=args.chunk_minutes,
                 max_workers=args.max_workers,
                 allow_download=args.yes,

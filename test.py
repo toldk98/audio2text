@@ -125,8 +125,7 @@ def test_profiles():
 def test_model_cache_status():
     _section("Model cache status")
 
-    _mock_gui_imports()
-    from gui.app import _model_cache_status, _MODEL_SIZES
+    from gui.helpers import _model_cache_status, _MODEL_SIZES
 
     _check(len(_MODEL_SIZES) >= 10, "_MODEL_SIZES has >= 10 entries")
 
@@ -148,7 +147,7 @@ def test_model_cache_status():
     with mock.patch("os.path.isfile", side_effect=lambda p: p.endswith("tiny.pt")), \
          mock.patch("os.path.isdir", return_value=True), \
          mock.patch("os.path.getsize", return_value=500*1024**2), \
-         mock.patch("gui.app._dir_size", return_value=500*1024**2):
+         mock.patch("gui.helpers._dir_size", return_value=500*1024**2):
         status = _model_cache_status("distil-large-v2")
         _check(not status.startswith("⚡"), "cached distil no ⚡ prefix")
 
@@ -310,15 +309,15 @@ def test_cli_parser():
     args4, _ = parser.parse_known_args(["pick"])
     _check(args4.mode == "pick", "mode=pick")
 
-    # new flags: align, diarize, clean_filter, cpu_profile
+    # new flags: align, diarize, clean_filter
     args5, _ = parser.parse_known_args(["file", "test.m4a",
                                           "--no-align", "--no-diarize",
                                           "--clean_filter", "light",
-                                          "--cpu_profile", "low"])
+                                          "--max_workers", "4"])
     _check(args5.align is False, "--no-align=False")
     _check(args5.diarize is False, "--no-diarize=False")
     _check(args5.clean_filter == "light", "clean_filter=light")
-    _check(args5.cpu_profile == "low", "cpu_profile=low")
+    _check(args5.max_workers == 4, "max_workers=4")
 
     # _fill_defaults fills None with actual defaults
     args6, _ = parser.parse_known_args(["file", "test.m4a"])
@@ -328,7 +327,6 @@ def test_cli_parser():
     _check(args6.align is True, "_fill_defaults align=True")
     _check(args6.diarize is True, "_fill_defaults diarize=True")
     _check(args6.clean_filter == "full", "_fill_defaults filter=full")
-    _check(args6.cpu_profile == "high", "_fill_defaults cpu=high")
     _check(args6.chunk_minutes == 0, "_fill_defaults chunk=0")
     _check(args6.max_workers == 2, "_fill_defaults workers=2")
 
@@ -395,22 +393,22 @@ def test_pick_utils():
 def test_gui_utils():
     _section("GUI utils")
 
-    _mock_gui_imports()
-    import gui.app
+    from gui.helpers import (_MODEL_SIZES, _cpu_display_map, _filter_display_map,
+                              _profile_names, _scan_model_cache)
 
-    _check(len(gui.app._MODEL_SIZES) > 10, "_MODEL_SIZES populated")
+    _check(len(_MODEL_SIZES) > 10, "_MODEL_SIZES populated")
 
-    _check("high" in gui.app._cpu_display_map(), "_cpu_display_map has high")
-    _check("full" in gui.app._filter_display_map(), "_filter_display_map has full")
+    _check("high" in _cpu_display_map(), "_cpu_display_map has high")
+    _check("full" in _filter_display_map(), "_filter_display_map has full")
 
     # _profile_names uses real list_profiles — should work without GUI
-    names = gui.app._profile_names()
+    names = _profile_names()
     _check(len(names) > 0, "_profile_names returns profiles")
     _check(all(isinstance(n, str) for n in names), "_profile_names returns strings")
 
     # _scan_model_cache with no cache dirs → empty
     with mock.patch("os.path.isdir", return_value=False):
-        entries = gui.app._scan_model_cache()
+        entries = _scan_model_cache()
         _check(entries == [], "_scan_model_cache no dirs → []")
 
     # _scan_model_cache with mock whisper dir
@@ -422,7 +420,7 @@ def test_gui_utils():
          mock.patch("os.path.getsize", return_value=150*1024**2), \
          mock.patch("os.path.getmtime", return_value=1234567890):
 
-        entries = gui.app._scan_model_cache()
+        entries = _scan_model_cache()
         _check(len(entries) >= 2, "_scan_model_cache finds mock entries")
 
 
@@ -776,7 +774,7 @@ def test_dedup_segments():
 def test_size_helpers():
     _section("_format_size / _dir_size")
 
-    from gui.app import _format_size, _dir_size
+    from gui.helpers import _format_size, _dir_size
     from gui.lang import _inst
 
     _inst.switch_to("uk")
@@ -881,60 +879,63 @@ def test_cpu_levels():
     _check("medium" in cpu_levels, "medium in cpu_levels")
     _check("low" in cpu_levels, "low in cpu_levels")
     _check(len(cpu_levels) == 3, "3 cpu levels")
+    _check(cpu_levels["high"]["min_workers_ratio"] == 0.75, "high ratio 0.75")
+    _check(cpu_levels["medium"]["min_workers_ratio"] == 0.25, "medium ratio 0.25")
+    _check(cpu_levels["low"]["min_workers_ratio"] == 0.00, "low ratio 0.00")
+    _check(cpu_levels["high"]["nice"] == 0, "high nice 0")
+    _check(cpu_levels["medium"]["nice"] == 5, "medium nice 5")
+    _check(cpu_levels["low"]["nice"] == 10, "low nice 10")
 
 
 # ---------------------------------------------------------------------------
-# _apply_cpu_profile
+# _apply_cpu_config
 # ---------------------------------------------------------------------------
-def test_apply_cpu_profile():
-    _section("_apply_cpu_profile")
+def test_apply_cpu_config():
+    _section("_apply_cpu_config")
 
-    # Save original env state
     orig = {}
     for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
               "TORCH_NUM_THREADS"):
         orig[k] = os.environ.get(k)
 
     _mock_heavy_imports()
-    from whisper_offline import _apply_cpu_profile
+    from whisper_offline import _apply_cpu_config
+    from config import cpu_levels
 
     ncpu = os.cpu_count() or 4
 
     try:
-        # low — all env vars = 1, cap = 1
-        cap = _apply_cpu_profile("low")
-        _check(cap == 1, f"low cap = {cap}")
+        # max_workers = ncpu → all env vars = ncpu (high)
+        _apply_cpu_config(ncpu)
+        _check(os.environ.get("OMP_NUM_THREADS") == str(ncpu), f"ncpu OMP={ncpu}")
+        _check(os.environ.get("MKL_NUM_THREADS") == str(ncpu), f"ncpu MKL={ncpu}")
+        _check(os.environ.get("OPENBLAS_NUM_THREADS") == str(ncpu), "ncpu OPENBLAS")
+        _check(os.environ.get("TORCH_NUM_THREADS") == str(ncpu), "ncpu TORCH")
+
+        # max_workers = 1 → all env vars = 1 (low)
+        _apply_cpu_config(1)
         _check(os.environ.get("OMP_NUM_THREADS") == "1", "low OMP=1")
         _check(os.environ.get("MKL_NUM_THREADS") == "1", "low MKL=1")
         _check(os.environ.get("OPENBLAS_NUM_THREADS") == "1", "low OPENBLAS=1")
         _check(os.environ.get("TORCH_NUM_THREADS") == "1", "low TORCH=1")
 
-        # medium — half cpu count, cap = half
-        half = max(2, ncpu // 2)
-        cap = _apply_cpu_profile("medium")
-        _check(cap == half, f"medium cap = {cap}")
-        _check(os.environ.get("OMP_NUM_THREADS") == str(half), f"medium OMP={half}")
-        _check(os.environ.get("MKL_NUM_THREADS") == str(half), f"medium MKL={half}")
-
-        # high — all env vars cleared, cap = ncpu
-        cap = _apply_cpu_profile("high")
-        _check(cap == ncpu, f"high cap = {cap}")
-        _check(os.environ.get("OMP_NUM_THREADS") is None, "high OMP cleared")
-        _check(os.environ.get("MKL_NUM_THREADS") is None, "high MKL cleared")
-        _check(os.environ.get("OPENBLAS_NUM_THREADS") is None, "high OPENBLAS cleared")
-        _check(os.environ.get("TORCH_NUM_THREADS") is None, "high TORCH cleared")
-
         # does not crash when psutil unavailable
-        cap = _apply_cpu_profile("low")
-        _check(cap == 1, "low again cap = 1")
+        _apply_cpu_config(2)
 
     finally:
-        # Restore
         for k, v in orig.items():
             if v is not None:
                 os.environ[k] = v
             else:
                 os.environ.pop(k, None)
+
+
+def test_probe_nice():
+    _section("_probe_nice")
+
+    from whisper_offline import _probe_nice
+    ok, method = _probe_nice()
+    _check(ok, f"_probe_nice() should succeed (got {method})")
 
 
 # ---------------------------------------------------------------------------
@@ -1069,7 +1070,8 @@ if __name__ == "__main__":
     test_exception_classes()
     test_timing_defaults_consistency()
     test_cpu_levels()
-    test_apply_cpu_profile()
+    test_apply_cpu_config()
+    test_probe_nice()
     test_check_resources()
     test_check_output_disk()
 

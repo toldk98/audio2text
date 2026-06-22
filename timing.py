@@ -96,13 +96,15 @@ class TimingDB:
                 audio_duration_sec: float,
                 chunk_minutes: int,
                 do_align: bool, do_diarize: bool,
-                do_clean: bool = True) -> dict:
+                do_clean: bool = True,
+                max_workers: int = 1) -> dict:
         is_chunked = chunk_minutes > 0
         n_chunks = max(1, math.ceil(audio_duration_sec / 60 / chunk_minutes)
                        ) if is_chunked else 1
+        workers_factor = 1 / math.sqrt(max_workers) if max_workers > 0 else 1
         clean_t = self.get(model_size, device, "clean", audio_duration_sec) if do_clean else 0
         split_t = self.get(model_size, device, "split") if is_chunked else 0
-        chunk_t = self.get(model_size, device, "chunk") * n_chunks
+        chunk_t = self.get(model_size, device, "chunk") * n_chunks * workers_factor
         merge_t = self.get(model_size, device, "merge") if is_chunked else 0
         align_t = self.get(model_size, device, "align", audio_duration_sec) if do_align else 0
         diarize_t = self.get(model_size, device, "diarize", audio_duration_sec) if do_diarize else 0
